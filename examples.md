@@ -36,6 +36,231 @@ func main() {
 }
 ```
 
+## Cursor-Based Pagination
+
+The package provides built-in support for cursor-based pagination using UUID v7 for efficient, scalable pagination:
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    
+    "github.com/google/uuid"
+    "github.com/nhalm/dbutil"
+    "your-project/internal/repository/sqlc"
+)
+
+// User represents a user with UUID v7 ID
+type User struct {
+    ID    uuid.UUID `json:"id"`
+    Name  string    `json:"name"`
+    Email string    `json:"email"`
+}
+
+func main() {
+    ctx := context.Background()
+    
+    conn, err := dbutil.NewConnection(ctx, "", sqlc.New)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer conn.Close()
+    
+    // Example 1: First page (no cursor)
+    params := dbutil.PaginationParams{
+        Cursor: nil,
+        Limit:  10,
+    }
+    
+    users, err := getPaginatedUsers(ctx, conn, params)
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    log.Printf("First page: %d users", len(users.Items))
+    if users.HasMore {
+        log.Printf("Next cursor: %s", *users.NextCursor)
+    }
+    
+    // Example 2: Next page (with cursor)
+    if users.NextCursor != nil {
+        nextParams := dbutil.PaginationParams{
+            Cursor: users.NextCursor,
+            Limit:  10,
+        }
+        
+        nextUsers, err := getPaginatedUsers(ctx, conn, nextParams)
+        if err != nil {
+            log.Fatal(err)
+        }
+        
+        log.Printf("Next page: %d users", len(nextUsers.Items))
+    }
+}
+
+func getPaginatedUsers(ctx context.Context, conn *dbutil.Connection[*sqlc.Queries], params dbutil.PaginationParams) (*dbutil.PaginationResult[User], error) {
+    return dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int) (*dbutil.PaginationResult[User], error) {
+        // Build query based on cursor - fetch limit+1 to check for more results
+        var query string
+        var args []interface{}
+        
+        if cursor == nil {
+            // First page
+            query = "SELECT id, name, email FROM users ORDER BY id ASC LIMIT $1"
+            args = []interface{}{limit + 1}
+        } else {
+            // Subsequent pages
+            query = "SELECT id, name, email FROM users WHERE id > $1 ORDER BY id ASC LIMIT $2"
+            args = []interface{}{*cursor, limit + 1}
+        }
+        
+        // Execute the query
+        rows, err := conn.Pool().Query(ctx, query, args...)
+        if err != nil {
+            return nil, dbutil.NewDatabaseError("User", "query", err)
+        }
+        defer rows.Close()
+        
+        // Collect results
+        var users []User
+        for rows.Next() {
+            var user User
+            if err := rows.Scan(&user.ID, &user.Name, &user.Email); err != nil {
+                return nil, dbutil.NewDatabaseError("User", "scan", err)
+            }
+            users = append(users, user)
+        }
+        
+        if err := rows.Err(); err != nil {
+            return nil, dbutil.NewDatabaseError("User", "rows", err)
+        }
+        
+        // Determine pagination state
+        hasMore := len(users) > limit
+        if hasMore {
+            users = users[:limit] // Remove the extra item
+        }
+        
+        // Create next cursor if there are more results
+        var nextCursor *string
+        if hasMore && len(users) > 0 {
+            cursor := dbutil.EncodeCursor(users[len(users)-1].ID)
+            nextCursor = &cursor
+        }
+        
+        return &dbutil.PaginationResult[User]{
+            Items:      users,
+            NextCursor: nextCursor,
+            HasMore:    hasMore,
+        }, nil
+    })
+}
+```
+
+### Advanced Pagination with Filters
+
+```go
+func getPaginatedActiveUsers(ctx context.Context, conn *dbutil.Connection[*sqlc.Queries], params dbutil.PaginationParams) (*dbutil.PaginationResult[User], error) {
+    return dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int) (*dbutil.PaginationResult[User], error) {
+        // Build query with existing WHERE clause
+        var query string
+        var args []interface{}
+        
+        if cursor == nil {
+            // First page
+            query = "SELECT id, name, email FROM users WHERE active = true ORDER BY id ASC LIMIT $1"
+            args = []interface{}{limit + 1}
+        } else {
+            // Subsequent pages
+            query = "SELECT id, name, email FROM users WHERE active = true AND id > $1 ORDER BY id ASC LIMIT $2"
+            args = []interface{}{*cursor, limit + 1}
+        }
+        
+        // Execute query and return results (same pattern as above)
+        // ... (query execution logic)
+        
+        return &dbutil.PaginationResult[User]{
+            Items:      users,
+            NextCursor: nextCursor,
+            HasMore:    hasMore,
+        }, nil
+    })
+}
+```
+
+### Working with sqlc-generated Queries
+
+```go
+// If you have sqlc-generated queries, you can adapt them for pagination:
+
+-- name: GetUsersForPagination :many
+SELECT id, name, email, created_at
+FROM users
+WHERE ($1::uuid IS NULL OR id > $1)
+ORDER BY id ASC
+LIMIT $2;
+
+func getPaginatedUsersWithSqlc(ctx context.Context, conn *dbutil.Connection[*sqlc.Queries], params dbutil.PaginationParams) (*dbutil.PaginationResult[sqlc.User], error) {
+    return dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int) (*dbutil.PaginationResult[sqlc.User], error) {
+        // Use sqlc-generated query with cursor
+        users, err := conn.Queries().GetUsersForPagination(ctx, sqlc.GetUsersForPaginationParams{
+            Column1: cursor, // cursor can be nil for first page
+            Limit:   int32(limit + 1), // +1 to check for more results
+        })
+        if err != nil {
+            return nil, dbutil.NewDatabaseError("User", "query", err)
+        }
+        
+        // Determine pagination state
+        hasMore := len(users) > limit
+        if hasMore {
+            users = users[:limit] // Remove the extra item
+        }
+        
+        // Create next cursor if there are more results
+        var nextCursor *string
+        if hasMore && len(users) > 0 {
+            cursor := dbutil.EncodeCursor(users[len(users)-1].ID)
+            nextCursor = &cursor
+        }
+        
+        return &dbutil.PaginationResult[sqlc.User]{
+            Items:      users,
+            NextCursor: nextCursor,
+            HasMore:    hasMore,
+        }, nil
+    })
+}
+```
+
+### Error Handling with Pagination
+
+```go
+import "errors"
+
+func handlePaginationErrors(err error) {
+    if dbutil.IsPaginationError(err) {
+        var paginationErr *dbutil.PaginationError
+        if errors.As(err, &paginationErr) {
+            switch paginationErr.Operation {
+            case "decode":
+                log.Printf("Invalid cursor provided: %v", paginationErr.Reason)
+            case "validate":
+                log.Printf("Invalid pagination parameters: %v", paginationErr.Reason)
+            default:
+                log.Printf("Pagination error: %v", paginationErr)
+            }
+        }
+        return
+    }
+    
+    // Handle other errors...
+    log.Printf("Unexpected error: %v", err)
+}
+```
+
 ## With Custom Configuration
 
 ```go

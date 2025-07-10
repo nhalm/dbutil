@@ -155,9 +155,40 @@ func TestFromPgxBool(t *testing.T) {
 	}
 }
 
+func TestNewUUID(t *testing.T) {
+	// Test that NewUUID generates a valid UUID v7
+	id1 := NewUUID()
+	id2 := NewUUID()
+
+	// UUIDs should not be equal
+	if id1 == id2 {
+		t.Errorf("Expected different UUIDs, got same: %v", id1)
+	}
+
+	// UUIDs should not be nil
+	if id1 == uuid.Nil {
+		t.Errorf("Expected non-nil UUID, got nil")
+	}
+
+	// Check that it's version 7 (4th nibble should be 7)
+	idStr := id1.String()
+	if len(idStr) != 36 || idStr[14] != '7' {
+		t.Errorf("Expected UUID v7, got %v", idStr)
+	}
+
+	// UUID v7 should be sortable (generated later should be greater)
+	time.Sleep(1 * time.Millisecond) // Ensure different timestamp
+	id3 := NewUUID()
+
+	// Compare as strings to check lexicographic ordering
+	if id1.String() >= id3.String() {
+		t.Errorf("Expected UUID v7 to be sortable, but %v >= %v", id1, id3)
+	}
+}
+
 func TestToPgxUUID(t *testing.T) {
-	// Test with valid UUID
-	id := uuid.New()
+	// Test with valid UUID v7
+	id := NewUUID()
 	result := ToPgxUUID(id)
 	if !result.Valid {
 		t.Errorf("Expected valid UUID, got valid=%v", result.Valid)
@@ -171,14 +202,21 @@ func TestToPgxUUID(t *testing.T) {
 }
 
 func TestFromPgxUUID(t *testing.T) {
-	// Test with valid pgtype.UUID
-	id := uuid.New()
+	// Test with valid pgtype.UUID (using v7)
+	id := NewUUID()
 	var pgUUID pgtype.UUID
 	_ = pgUUID.Scan(id.String())
 
 	result := FromPgxUUID(pgUUID)
 	if result != id {
 		t.Errorf("Expected %v, got %v", id, result)
+	}
+
+	// Test with invalid pgtype.UUID
+	pgUUID = pgtype.UUID{Valid: false}
+	result = FromPgxUUID(pgUUID)
+	if result != uuid.Nil {
+		t.Errorf("Expected uuid.Nil for invalid UUID, got %v", result)
 	}
 }
 

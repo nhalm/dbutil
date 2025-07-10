@@ -207,17 +207,7 @@ func TestConfig(t *testing.T) {
 	}
 }
 
-func TestConfigDefaults(t *testing.T) {
-	// Test that nil config works (should use defaults)
-	var config *Config = nil
 
-	// This would normally be tested in the createPoolWithConfig function,
-	// but we can't easily test that without a database connection.
-	// Instead, we just verify the config can be nil.
-	if config != nil {
-		t.Error("Expected config to be nil for this test")
-	}
-}
 
 func TestMetricsCollectorInterface(t *testing.T) {
 	// Test that we can implement the MetricsCollector interface

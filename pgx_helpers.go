@@ -12,6 +12,13 @@ import (
 // These functions provide seamless conversion between Go types and pgx types,
 // handling null values appropriately. Use these instead of manual type conversions.
 
+// NewUUID generates a new UUID v7 (time-sortable).
+// UUID v7 provides lexicographic sortability which is ideal for database primary keys
+// and cursor-based pagination.
+func NewUUID() uuid.UUID {
+	return uuid.Must(uuid.NewV7())
+}
+
 // ToPgxText converts a string pointer to pgtype.Text.
 // If the input is nil, returns an invalid pgtype.Text (NULL in database).
 func ToPgxText(s *string) pgtype.Text {
@@ -31,6 +38,7 @@ func ToPgxInt8(i *int64) pgtype.Int8 {
 }
 
 // ToPgxUUID converts a uuid.UUID to pgtype.UUID.
+// Works with any UUID version, including the new UUID v7.
 func ToPgxUUID(id uuid.UUID) pgtype.UUID {
 	var pgxID pgtype.UUID
 	_ = pgxID.Scan(id.String()) // Error intentionally ignored as uuid.UUID is always valid
@@ -39,6 +47,7 @@ func ToPgxUUID(id uuid.UUID) pgtype.UUID {
 
 // FromPgxUUID converts a pgtype.UUID to uuid.UUID.
 // Returns uuid.Nil if the pgtype.UUID is invalid or cannot be parsed.
+// Works with any UUID version, including the new UUID v7.
 func FromPgxUUID(pgxID pgtype.UUID) uuid.UUID {
 	if !pgxID.Valid {
 		return uuid.Nil
