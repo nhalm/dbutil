@@ -44,11 +44,13 @@ jobs:
       run: go test -v -race -coverprofile=coverage.out ./...
     
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.out
         flags: unittests
         name: codecov-umbrella
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false
 
   lint:
     name: Lint
