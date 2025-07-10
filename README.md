@@ -1,5 +1,12 @@
 # Database Utilities
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/nhalm/dbutil)](https://golang.org/doc/devel/release.html)
+[![CI Status](https://github.com/nhalm/dbutil/workflows/CI%2FCD/badge.svg)](https://github.com/nhalm/dbutil/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/nhalm/dbutil)](https://goreportcard.com/report/github.com/nhalm/dbutil)
+[![Coverage Status](https://codecov.io/gh/nhalm/dbutil/branch/main/graph/badge.svg)](https://codecov.io/gh/nhalm/dbutil)
+[![Release](https://img.shields.io/github/v/release/nhalm/dbutil)](https://github.com/nhalm/dbutil/releases)
+[![License](https://img.shields.io/github/license/nhalm/dbutil)](LICENSE)
+
 A reusable Go package that provides database connection utilities and testing infrastructure for applications using PostgreSQL with pgx and sqlc.
 
 ## Overview
