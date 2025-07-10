@@ -134,9 +134,14 @@ func IsPaginationError(err error) bool {
 	return errors.As(err, &paginationErr)
 }
 
+// HasID interface for types with UUID ID field (typical sqlc generated structs)
+type HasID interface {
+	GetID() uuid.UUID
+}
+
 // Paginate executes a paginated query and returns the complete result
-// The queryFunc should handle the cursor logic and return a complete PaginationResult
-func Paginate[T any](ctx context.Context, params PaginationParams, queryFunc func(ctx context.Context, cursor *uuid.UUID, limit int) (*PaginationResult[T], error)) (*PaginationResult[T], error) {
+// Designed for sqlc - just pass your sqlc query function and we handle everything else
+func Paginate[T HasID](ctx context.Context, params PaginationParams, queryFunc func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]T, error)) (*PaginationResult[T], error) {
 	if err := ValidatePaginationParams(params); err != nil {
 		return nil, err
 	}
@@ -151,11 +156,29 @@ func Paginate[T any](ctx context.Context, params PaginationParams, queryFunc fun
 		cursorID = &id
 	}
 
-	// Execute the query function
-	result, err := queryFunc(ctx, cursorID, params.Limit)
+	// Execute the query function with limit+1 to check for more results
+	items, err := queryFunc(ctx, cursorID, int32(params.Limit+1))
 	if err != nil {
 		return nil, NewPaginationError("query", "failed to execute query", err)
 	}
 
-	return result, nil
+	// Determine if there are more results
+	hasMore := len(items) > params.Limit
+	if hasMore {
+		items = items[:params.Limit] // Remove the extra item
+	}
+
+	// Create next cursor if there are more results
+	var nextCursor *string
+	if hasMore && len(items) > 0 {
+		lastID := items[len(items)-1].GetID()
+		cursor := EncodeCursor(lastID)
+		nextCursor = &cursor
+	}
+
+	return &PaginationResult[T]{
+		Items:      items,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
 }

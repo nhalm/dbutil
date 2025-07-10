@@ -258,6 +258,10 @@ type TestItem struct {
 	Name string
 }
 
+func (t TestItem) GetID() uuid.UUID {
+	return t.ID
+}
+
 func TestPaginate(t *testing.T) {
 	ctx := context.Background()
 
@@ -276,7 +280,7 @@ func TestPaginate(t *testing.T) {
 		Limit:  3,
 	}
 
-	result, err := Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int) (*PaginationResult[TestItem], error) {
+	result, err := Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]TestItem, error) {
 		var startIndex int
 
 		if cursor == nil {
@@ -291,38 +295,17 @@ func TestPaginate(t *testing.T) {
 				}
 			}
 			if startIndex == -1 || startIndex >= len(testItems) {
-				return &PaginationResult[TestItem]{
-					Items:      []TestItem{},
-					NextCursor: nil,
-					HasMore:    false,
-				}, nil
+				return []TestItem{}, nil
 			}
 		}
 
-		// Get items starting from startIndex, up to limit+1 to check for more
+		// Get items starting from startIndex, up to limit
 		var items []TestItem
-		for i := startIndex; i < len(testItems) && len(items) <= limit; i++ {
+		for i := startIndex; i < len(testItems) && len(items) < int(limit); i++ {
 			items = append(items, testItems[i])
 		}
 
-		// Determine if there are more results
-		hasMore := len(items) > limit
-		if hasMore {
-			items = items[:limit] // Remove the extra item
-		}
-
-		// Create next cursor if there are more results
-		var nextCursor *string
-		if hasMore && len(items) > 0 {
-			cursor := EncodeCursor(items[len(items)-1].ID)
-			nextCursor = &cursor
-		}
-
-		return &PaginationResult[TestItem]{
-			Items:      items,
-			NextCursor: nextCursor,
-			HasMore:    hasMore,
-		}, nil
+		return items, nil
 	})
 
 	if err != nil {
@@ -347,7 +330,7 @@ func TestPaginate(t *testing.T) {
 		Limit:  3,
 	}
 
-	nextResult, err := Paginate(ctx, nextParams, func(ctx context.Context, cursor *uuid.UUID, limit int) (*PaginationResult[TestItem], error) {
+	nextResult, err := Paginate(ctx, nextParams, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]TestItem, error) {
 		// Same query logic as above
 		var startIndex int
 
@@ -362,35 +345,16 @@ func TestPaginate(t *testing.T) {
 				}
 			}
 			if startIndex == -1 || startIndex >= len(testItems) {
-				return &PaginationResult[TestItem]{
-					Items:      []TestItem{},
-					NextCursor: nil,
-					HasMore:    false,
-				}, nil
+				return []TestItem{}, nil
 			}
 		}
 
 		var items []TestItem
-		for i := startIndex; i < len(testItems) && len(items) <= limit; i++ {
+		for i := startIndex; i < len(testItems) && len(items) < int(limit); i++ {
 			items = append(items, testItems[i])
 		}
 
-		hasMore := len(items) > limit
-		if hasMore {
-			items = items[:limit]
-		}
-
-		var nextCursor *string
-		if hasMore && len(items) > 0 {
-			cursor := EncodeCursor(items[len(items)-1].ID)
-			nextCursor = &cursor
-		}
-
-		return &PaginationResult[TestItem]{
-			Items:      items,
-			NextCursor: nextCursor,
-			HasMore:    hasMore,
-		}, nil
+		return items, nil
 	})
 
 	if err != nil {
@@ -419,7 +383,7 @@ func TestPaginateWithError(t *testing.T) {
 	}
 
 	// Test query function error
-	_, err := Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int) (*PaginationResult[TestItem], error) {
+	_, err := Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]TestItem, error) {
 		return nil, errors.New("query error")
 	})
 
@@ -441,12 +405,8 @@ func TestPaginateInvalidParams(t *testing.T) {
 		Limit:  0, // Invalid
 	}
 
-	_, err := Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int) (*PaginationResult[TestItem], error) {
-		return &PaginationResult[TestItem]{
-			Items:      []TestItem{},
-			NextCursor: nil,
-			HasMore:    false,
-		}, nil
+	_, err := Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]TestItem, error) {
+		return []TestItem{}, nil
 	})
 
 	if err == nil {

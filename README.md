@@ -125,16 +125,9 @@ writeQueries := rwConn.WriteQueries() // Use for INSERT/UPDATE/DELETE
 ### **Cursor-Based Pagination**
 Efficient pagination using UUID v7 for scalable, consistent results:
 ```go
-// First page
-params := dbutil.PaginationParams{Cursor: nil, Limit: 10}
-result, err := dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int) (*dbutil.PaginationResult[User], error) {
-    // Your query logic here - works with sqlc or raw SQL
-    // Fetch limit+1 items to check for more results
-    return &dbutil.PaginationResult[User]{
-        Items:      users,
-        NextCursor: nextCursor,
-        HasMore:    hasMore,
-    }, nil
+// Simple one-liner with sqlc
+result, err := dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]sqlc.User, error) {
+    return queries.GetUsersForPagination(ctx, cursor, limit)
 })
 
 // Next page
@@ -142,6 +135,12 @@ if result.HasMore {
     nextParams := dbutil.PaginationParams{Cursor: result.NextCursor, Limit: 10}
     nextResult, err := dbutil.Paginate(ctx, nextParams, queryFunc)
 }
+
+// Your sqlc query:
+-- name: GetUsersForPagination :many
+SELECT id, name, email FROM users 
+WHERE ($1::uuid IS NULL OR id > $1) 
+ORDER BY id ASC LIMIT $2;
 ```
 
 ### **Retry Logic**
