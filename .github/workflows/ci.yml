@@ -1,0 +1,159 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.21', '1.22', '1.23' ]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+    
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Verify dependencies
+      run: go mod verify
+    
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.out ./...
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+    
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        args: --timeout=5m
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+    
+    - name: Run Gosec Security Scanner
+      uses: securecodewarrior/github-action-gosec@master
+      with:
+        args: './...'
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+    
+    - name: Build
+      run: go build -v ./...
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+    
+    - name: Run integration tests
+      run: go test -v -tags=integration ./...
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb?sslmode=disable
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [test, lint, build, integration-test]
+    if: github.event_name == 'release' && github.event.action == 'published'
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+    
+    - name: Create release assets
+      run: |
+        GOOS=linux GOARCH=amd64 go build -o dbutil-linux-amd64 ./...
+        GOOS=darwin GOARCH=amd64 go build -o dbutil-darwin-amd64 ./...
+        GOOS=windows GOARCH=amd64 go build -o dbutil-windows-amd64.exe ./...
+    
+    - name: Upload release assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./dbutil-linux-amd64
+        asset_name: dbutil-linux-amd64
+        asset_content_type: application/octet-stream 
