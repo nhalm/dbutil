@@ -19,8 +19,11 @@ jobs:
       with:
         go-version: '1.23'
     
-    - name: Run tests
-      run: go test -v ./...
+    - name: Run full test suite
+      run: |
+        echo "Running comprehensive tests for release..."
+        go test -v -race ./...
+        go test -v -tags=integration ./...
     
     - name: Generate changelog
       id: changelog
