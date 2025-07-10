@@ -9,8 +9,6 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    # Only run if the tag is pushed from main branch
-    if: github.ref_type == 'tag'
     permissions:
       contents: write
     steps:
