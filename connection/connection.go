@@ -1,4 +1,4 @@
-// Package dbutil provides database connection utilities and testing infrastructure
+// Package connection provides database connection utilities and testing infrastructure
 // for applications using PostgreSQL with pgx and sqlc.
 //
 // This package is designed specifically for sqlc users who want:
@@ -15,7 +15,7 @@
 //
 // Example usage:
 //
-//	conn, err := database.NewConnection(ctx, "", sqlc.New)
+//	conn, err := connection.NewConnection(ctx, "", sqlc.New)
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
@@ -23,7 +23,7 @@
 //
 //	queries := conn.Queries()
 //	users, err := queries.GetAllUsers(ctx)
-package dbutil
+package connection
 
 import (
 	"context"

@@ -6,7 +6,7 @@
 [![Release](https://img.shields.io/github/v/release/nhalm/dbutil)](https://github.com/nhalm/dbutil/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A reusable Go package that provides database connection utilities and testing infrastructure for applications using PostgreSQL with pgx and sqlc.
+A comprehensive Go package that provides database connection utilities, pagination, and testing infrastructure for applications using PostgreSQL with pgx and sqlc.
 
 ## Overview
 
@@ -14,8 +14,14 @@ This package is designed specifically for **sqlc users** who want:
 - **Reusable database utilities** that work with any sqlc-generated queries
 - **Optimized testing infrastructure** with shared connections for faster tests
 - **Type-safe PostgreSQL operations** with comprehensive pgx type helpers
+- **Built-in pagination** with cursor-based pagination for UUID v7 primary keys
 - **Structured error handling** with consistent error types
 - **Production-ready features** like health checks, metrics, retry logic, and connection hooks
+
+## Package Structure
+
+- **`github.com/nhalm/dbutil`** - Core utilities including pagination
+- **`github.com/nhalm/dbutil/connection`** - Database connection management, testing, and pgx helpers
 
 ## Installation
 
@@ -32,7 +38,7 @@ import (
     "context"
     "log"
     
-    "github.com/nhalm/dbutil"
+    "github.com/nhalm/dbutil/connection"
     "your-project/internal/repository/sqlc" // Your sqlc-generated package
 )
 
@@ -40,7 +46,7 @@ func main() {
     ctx := context.Background()
     
     // Create connection with your sqlc queries
-    conn, err := dbutil.NewConnection(ctx, "", sqlc.New)
+    conn, err := connection.NewConnection(ctx, "", sqlc.New)
     if err != nil {
         log.Fatal(err)
     }
@@ -54,6 +60,48 @@ func main() {
     }
     
     log.Printf("Found %d users", len(users))
+}
+```
+
+## Pagination
+
+Built-in cursor-based pagination for UUID v7 primary keys:
+
+```go
+import "github.com/nhalm/dbutil"
+
+// Your entity must implement HasID interface
+type User struct {
+    ID    uuid.UUID `json:"id"`
+    Name  string    `json:"name"`
+    Email string    `json:"email"`
+}
+
+func (u User) GetID() uuid.UUID {
+    return u.ID
+}
+
+// Paginate query results
+params := dbutil.PaginationParams{
+    Limit:  20,
+    Cursor: "", // Empty for first page
+}
+
+result, err := dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]User, error) {
+    // Your sqlc query with cursor support
+    return queries.GetUsersPaginated(ctx, sqlc.GetUsersPaginatedParams{
+        Cursor: cursor,
+        Limit:  limit,
+    })
+})
+
+if err != nil {
+    log.Fatal(err)
+}
+
+log.Printf("Found %d users, has more: %t", len(result.Items), result.HasMore)
+if result.HasMore {
+    log.Printf("Next cursor: %s", result.NextCursor)
 }
 ```
 
@@ -71,13 +119,15 @@ The package uses these environment variables with sensible defaults:
 
 ### Custom Configuration
 ```go
-config := &dbutil.Config{
+import "github.com/nhalm/dbutil/connection"
+
+config := &connection.Config{
     MaxConns:        20,
     MinConns:        5,
     MaxConnLifetime: 1 * time.Hour,
     SearchPath:      "myschema",
 }
-conn, err := dbutil.NewConnectionWithConfig(ctx, "", sqlc.New, config)
+conn, err := connection.NewConnectionWithConfig(ctx, "", sqlc.New, config)
 ```
 
 ## Key Features
@@ -85,8 +135,8 @@ conn, err := dbutil.NewConnectionWithConfig(ctx, "", sqlc.New, config)
 ### **Generic Design**
 Works with any sqlc-generated queries without coupling to specific packages:
 ```go
-conn, err := dbutil.NewConnection(ctx, "", myapp.New)
-conn, err := dbutil.NewConnection(ctx, "", yourapp.New)
+conn, err := connection.NewConnection(ctx, "", myapp.New)
+conn, err := connection.NewConnection(ctx, "", yourapp.New)
 ```
 
 ### **Transaction Support**
@@ -117,7 +167,9 @@ conn = conn.WithHooks(myHooks)
 
 ### **Read/Write Splitting**
 ```go
-rwConn, err := dbutil.NewReadWriteConnection(ctx, readDSN, writeDSN, sqlc.New)
+import "github.com/nhalm/dbutil/connection"
+
+rwConn, err := connection.NewReadWriteConnection(ctx, readDSN, writeDSN, sqlc.New)
 readQueries := rwConn.ReadQueries()   // Use for SELECT queries
 writeQueries := rwConn.WriteQueries() // Use for INSERT/UPDATE/DELETE
 ```
@@ -130,16 +182,16 @@ err = retryableConn.WithRetryableTransaction(ctx, func(ctx context.Context, tx *
 })
 ```
 
-
-
 ## Testing
 
 This package provides optimized testing utilities with shared connections for faster integration tests:
 
 ```go
+import "github.com/nhalm/dbutil/connection"
+
 func TestUserOperations(t *testing.T) {
-    conn := dbutil.RequireTestDB(t, sqlc.New)     // Shared connection
-    dbutil.CleanupTestData(conn,                  // Clean data between tests
+    conn := connection.RequireTestDB(t, sqlc.New)     // Shared connection
+    connection.CleanupTestData(conn,                  // Clean data between tests
         "DELETE FROM users WHERE email LIKE 'test_%'",
     )
     
@@ -163,30 +215,32 @@ go test ./...
 ```
 
 ### Test Utilities
-- **`RequireTestDB(t, sqlc.New)`** - Returns shared test connection, skips if no database
-- **`CleanupTestData(conn, "DELETE ...")`** - Cleans test data between tests
-- **`GetTestConnection(sqlc.New)`** - Returns connection or nil if unavailable
+- **`connection.RequireTestDB(t, sqlc.New)`** - Returns shared test connection, skips if no database
+- **`connection.CleanupTestData(conn, "DELETE ...")`** - Cleans test data between tests
+- **`connection.GetTestConnection(sqlc.New)`** - Returns connection or nil if unavailable
 
 ## Type Helpers
 
 Comprehensive pgx type conversion utilities:
 
 ```go
+import "github.com/nhalm/dbutil/connection"
+
 // String conversions
-pgxText := dbutil.ToPgxText(&myString)
-stringPtr := dbutil.FromPgxText(pgxText)
+pgxText := connection.ToPgxText(&myString)
+stringPtr := connection.FromPgxText(pgxText)
 
 // Numeric conversions
-pgxNum := dbutil.ToPgxNumericFromFloat64Ptr(&myFloat)
-floatPtr := dbutil.FromPgxNumericPtr(pgxNum)
+pgxNum := connection.ToPgxNumericFromFloat64Ptr(&myFloat)
+floatPtr := connection.FromPgxNumericPtr(pgxNum)
 
 // Time conversions
-pgxTime := dbutil.ToPgxTimestamptz(&myTime)
-timePtr := dbutil.FromPgxTimestamptzPtr(pgxTime)
+pgxTime := connection.ToPgxTimestamptz(&myTime)
+timePtr := connection.FromPgxTimestamptzPtr(pgxTime)
 
 // UUID conversions
-pgxUUID := dbutil.ToPgxUUID(myUUID)
-myUUID := dbutil.FromPgxUUID(pgxUUID)
+pgxUUID := connection.ToPgxUUID(myUUID)
+myUUID := connection.FromPgxUUID(pgxUUID)
 ```
 
 ## Error Handling
@@ -194,48 +248,42 @@ myUUID := dbutil.FromPgxUUID(pgxUUID)
 Structured error types for consistent error handling:
 
 ```go
+import "github.com/nhalm/dbutil/connection"
+
 // Create structured errors
-err := dbutil.NewNotFoundError("User", userID)
-err := dbutil.NewValidationError("Email", "create", "address", "invalid format", nil)
-err := dbutil.NewDatabaseError("Order", "query", originalErr)
+err := connection.NewNotFoundError("User", userID)
+err := connection.NewValidationError("Email", "create", "address", "invalid format", nil)
+err := connection.NewDatabaseError("Order", "query", originalErr)
 
 // Use with errors.As for type checking
-var notFoundErr *dbutil.NotFoundError
+var notFoundErr *connection.NotFoundError
 if errors.As(err, &notFoundErr) {
-    // Handle not found case
+    log.Printf("Entity not found: %s", notFoundErr.Entity)
 }
 ```
 
-## Examples
+## Migration Guide
 
-See [examples.md](examples.md) for comprehensive usage examples including:
-- Custom configuration
-- Transaction handling
-- Error handling patterns
-- Read/write splitting
-- Retry logic
-- Connection hooks
-- Integration testing
-- Type conversion helpers
+If you're upgrading from v1, the main changes are:
 
-## Integration with golang-migrate
+1. **Import paths**: Connection utilities moved to `github.com/nhalm/dbutil/connection`
+2. **New pagination**: Added `dbutil.Paginate()` for cursor-based pagination
+3. **Same API**: All existing connection APIs remain the same
 
-Use `GetDSN()` with golang-migrate for database migrations:
-
+### Before (v1):
 ```go
-import (
-    "github.com/golang-migrate/migrate/v4"
-    _ "github.com/golang-migrate/migrate/v4/database/postgres"
-    _ "github.com/golang-migrate/migrate/v4/source/file"
-)
+import "github.com/nhalm/dbutil"
 
-m, err := migrate.New("file://migrations", dbutil.GetDSN())
-if err != nil {
-    log.Fatal(err)
-}
-defer m.Close()
-
-if err := m.Up(); err != nil {
-    log.Fatal(err)
-}
+conn, err := dbutil.NewConnection(ctx, "", sqlc.New)
 ```
+
+### After (v2):
+```go
+import "github.com/nhalm/dbutil/connection"
+
+conn, err := connection.NewConnection(ctx, "", sqlc.New)
+```
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.

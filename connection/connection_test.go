@@ -1,4 +1,4 @@
-package dbutil
+package connection
 
 import (
 	"os"
