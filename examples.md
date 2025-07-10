@@ -36,6 +36,149 @@ func main() {
 }
 ```
 
+## Cursor-Based Pagination
+
+The package provides built-in support for cursor-based pagination using UUID v7 for efficient, scalable pagination:
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    
+    "github.com/google/uuid"
+    "github.com/nhalm/dbutil"
+    "your-project/internal/repository/sqlc"
+)
+
+// User represents a user with UUID v7 ID
+type User struct {
+    ID    uuid.UUID `json:"id"`
+    Name  string    `json:"name"`
+    Email string    `json:"email"`
+}
+
+func main() {
+    ctx := context.Background()
+    
+    conn, err := dbutil.NewConnection(ctx, "", sqlc.New)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer conn.Close()
+    
+    // Example 1: First page (no cursor)
+    params := dbutil.PaginationParams{
+        Cursor: nil,
+        Limit:  10,
+    }
+    
+    users, err := getPaginatedUsers(ctx, conn, params)
+    if err != nil {
+        log.Fatal(err)
+    }
+    
+    log.Printf("First page: %d users", len(users.Items))
+    if users.HasMore {
+        log.Printf("Next cursor: %s", *users.NextCursor)
+    }
+    
+    // Example 2: Next page (with cursor)
+    if users.NextCursor != nil {
+        nextParams := dbutil.PaginationParams{
+            Cursor: users.NextCursor,
+            Limit:  10,
+        }
+        
+        nextUsers, err := getPaginatedUsers(ctx, conn, nextParams)
+        if err != nil {
+            log.Fatal(err)
+        }
+        
+        log.Printf("Next page: %d users", len(nextUsers.Items))
+    }
+}
+
+func getPaginatedUsers(ctx context.Context, conn *dbutil.Connection[*sqlc.Queries], params dbutil.PaginationParams) (*dbutil.PaginationResult[sqlc.User], error) {
+    return dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]sqlc.User, error) {
+        // Just call your sqlc query - that's it!
+        return conn.Queries().GetUsersForPagination(ctx, sqlc.GetUsersForPaginationParams{
+            Cursor: cursor, // nil for first page
+            Limit:  limit,  // limit+1 is handled automatically
+        })
+    })
+}
+```
+
+### Advanced Pagination with Filters
+
+```go
+func getPaginatedActiveUsers(ctx context.Context, conn *dbutil.Connection[*sqlc.Queries], params dbutil.PaginationParams) (*dbutil.PaginationResult[sqlc.User], error) {
+    return dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]sqlc.User, error) {
+        // Just call your sqlc query with filters - super simple!
+        return conn.Queries().GetActiveUsersForPagination(ctx, sqlc.GetActiveUsersForPaginationParams{
+            Cursor: cursor,
+            Limit:  limit,
+        })
+    })
+}
+```
+
+### Working with sqlc-generated Queries
+
+```go
+// If you have sqlc-generated queries, you can adapt them for pagination:
+
+-- name: GetUsersForPagination :many
+SELECT id, name, email, created_at
+FROM users
+WHERE ($1::uuid IS NULL OR id > $1)
+ORDER BY id ASC
+LIMIT $2;
+
+// The sqlc query would look like this:
+-- name: GetUsersForPagination :many
+SELECT id, name, email, created_at
+FROM users
+WHERE ($1::uuid IS NULL OR id > $1)
+ORDER BY id ASC
+LIMIT $2;
+
+func getPaginatedUsersWithSqlc(ctx context.Context, conn *dbutil.Connection[*sqlc.Queries], params dbutil.PaginationParams) (*dbutil.PaginationResult[sqlc.User], error) {
+    return dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]sqlc.User, error) {
+        // One line - that's it!
+        return conn.Queries().GetUsersForPagination(ctx, cursor, limit)
+    })
+}
+```
+
+### Error Handling with Pagination
+
+```go
+import "errors"
+
+func handlePaginationErrors(err error) {
+    if dbutil.IsPaginationError(err) {
+        var paginationErr *dbutil.PaginationError
+        if errors.As(err, &paginationErr) {
+            switch paginationErr.Operation {
+            case "decode":
+                log.Printf("Invalid cursor provided: %v", paginationErr.Reason)
+            case "validate":
+                log.Printf("Invalid pagination parameters: %v", paginationErr.Reason)
+            default:
+                log.Printf("Pagination error: %v", paginationErr)
+            }
+        }
+        return
+    }
+    
+    // Handle other errors...
+    log.Printf("Unexpected error: %v", err)
+}
+```
+
 ## With Custom Configuration
 
 ```go

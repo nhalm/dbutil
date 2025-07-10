@@ -122,6 +122,27 @@ readQueries := rwConn.ReadQueries()   // Use for SELECT queries
 writeQueries := rwConn.WriteQueries() // Use for INSERT/UPDATE/DELETE
 ```
 
+### **Cursor-Based Pagination**
+Efficient pagination using UUID v7 for scalable, consistent results:
+```go
+// Simple one-liner with sqlc
+result, err := dbutil.Paginate(ctx, params, func(ctx context.Context, cursor *uuid.UUID, limit int32) ([]sqlc.User, error) {
+    return queries.GetUsersForPagination(ctx, cursor, limit)
+})
+
+// Next page
+if result.HasMore {
+    nextParams := dbutil.PaginationParams{Cursor: result.NextCursor, Limit: 10}
+    nextResult, err := dbutil.Paginate(ctx, nextParams, queryFunc)
+}
+
+// Your sqlc query:
+-- name: GetUsersForPagination :many
+SELECT id, name, email FROM users 
+WHERE ($1::uuid IS NULL OR id > $1) 
+ORDER BY id ASC LIMIT $2;
+```
+
 ### **Retry Logic**
 ```go
 retryableConn := conn.WithRetry(nil) // Uses defaults
@@ -184,7 +205,8 @@ floatPtr := dbutil.FromPgxNumericPtr(pgxNum)
 pgxTime := dbutil.ToPgxTimestamptz(&myTime)
 timePtr := dbutil.FromPgxTimestamptzPtr(pgxTime)
 
-// UUID conversions
+// UUID conversions (supports UUID v7 for time-sortable IDs)
+newID := dbutil.NewUUID()           // Generates UUID v7
 pgxUUID := dbutil.ToPgxUUID(myUUID)
 myUUID := dbutil.FromPgxUUID(pgxUUID)
 ```
