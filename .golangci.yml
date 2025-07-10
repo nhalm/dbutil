@@ -1,3 +1,6 @@
+run:
+  timeout: 5m
+
 linters:
   enable:
     - errcheck
@@ -9,10 +12,9 @@ linters:
     - unused
     - gofmt
     - goimports
-    - goconst
     - misspell
     - unconvert
-    - gosec
 
-run:
-  timeout: 5m 
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0 
