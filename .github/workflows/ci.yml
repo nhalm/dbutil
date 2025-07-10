@@ -146,18 +146,14 @@ jobs:
       with:
         go-version: '1.23'
     
-    - name: Create release assets
+    - name: Verify build for release
       run: |
-        GOOS=linux GOARCH=amd64 go build -o dbutil-linux-amd64 ./...
-        GOOS=darwin GOARCH=amd64 go build -o dbutil-darwin-amd64 ./...
-        GOOS=windows GOARCH=amd64 go build -o dbutil-windows-amd64.exe ./...
+        echo "Verifying library builds correctly on multiple platforms"
+        GOOS=linux GOARCH=amd64 go build ./...
+        GOOS=darwin GOARCH=amd64 go build ./...
+        GOOS=windows GOARCH=amd64 go build ./...
     
-    - name: Upload release assets
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./dbutil-linux-amd64
-        asset_name: dbutil-linux-amd64
-        asset_content_type: application/octet-stream 
+    - name: Create source archive
+      run: |
+        git archive --format=tar.gz --prefix=dbutil-${{ github.ref_name }}/ HEAD > dbutil-${{ github.ref_name }}.tar.gz
+        echo "Created source archive: dbutil-${{ github.ref_name }}.tar.gz" 
