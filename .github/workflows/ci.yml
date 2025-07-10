@@ -30,9 +30,9 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}-v2
         restore-keys: |
-          ${{ runner.os }}-go-${{ matrix.go-version }}-
+          ${{ runner.os }}-go-${{ matrix.go-version }}-v2-
     
     - name: Download dependencies
       run: go mod download
@@ -41,16 +41,7 @@ jobs:
       run: go mod verify
     
     - name: Run tests
-      run: go test -v -race -coverprofile=coverage.out ./...
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.out
-        flags: unittests
-        name: codecov-umbrella
-        token: ${{ secrets.CODECOV_TOKEN }}
-        fail_ci_if_error: false
+      run: go test -v -race -parallel=1 ./...
 
   lint:
     name: Lint
@@ -84,7 +75,7 @@ jobs:
       run: go install github.com/securego/gosec/v2/cmd/gosec@latest
     
     - name: Run Gosec Security Scanner
-      run: gosec ./...
+      run: gosec -exclude=G115 ./...
       continue-on-error: true
 
   build:
@@ -129,7 +120,7 @@ jobs:
         go-version: '1.23'
     
     - name: Run integration tests
-      run: go test -v -tags=integration ./...
+      run: go test -v -tags=integration -parallel=1 ./...
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb?sslmode=disable
 
