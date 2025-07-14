@@ -68,12 +68,20 @@ func (cg *CodeGenerator) generateQueryResultStruct(query Query) (string, error) 
 	tmpl := `// {{.StructName}} represents the result of the {{.QueryName}} query
 type {{.StructName}} struct {
 {{range .Fields}}	{{.Name}} {{.Type}} ` + "`{{.Tag}}`" + `
+{{end}}}
+
+// GetID returns the ID field for pagination (assumes first UUID field is the ID)
+func (r {{.StructName}}) GetID() uuid.UUID {
+{{if .IDField}}	return r.{{.IDField}}
+{{else}}	// No UUID field found, return zero UUID
+	return uuid.UUID{}
 {{end}}}`
 
 	// Prepare template data
 	data := struct {
 		StructName string
 		QueryName  string
+		IDField    string
 		Fields     []struct {
 			Name string
 			Type string
@@ -84,7 +92,7 @@ type {{.StructName}} struct {
 		QueryName:  query.Name,
 	}
 
-	// Add fields from query columns
+	// Add fields from query columns and find ID field
 	for _, col := range query.Columns {
 		field := struct {
 			Name string
@@ -96,6 +104,11 @@ type {{.StructName}} struct {
 			Tag:  col.GoStructTag(),
 		}
 		data.Fields = append(data.Fields, field)
+
+		// Use the first UUID field as the ID field for pagination
+		if data.IDField == "" && col.IsUUID() {
+			data.IDField = col.GoFieldName()
+		}
 	}
 
 	// Execute template
@@ -278,10 +291,31 @@ func (r *{{.RepositoryName}}) {{.FunctionName}}(ctx context.Context{{.ParameterD
 // generatePaginatedQueryFunction generates a function that returns paginated results
 func (cg *CodeGenerator) generatePaginatedQueryFunction(query Query) (string, error) {
 	tmpl := `// {{.FunctionName}} executes the {{.QueryName}} query with pagination
-func (r *{{.RepositoryName}}) {{.FunctionName}}(ctx context.Context, cursor *uuid.UUID, limit int32{{.ParameterDeclarations}}) (*PaginationResult[{{.ResultType}}], error) {
+func (r *{{.RepositoryName}}) {{.FunctionName}}(ctx context.Context, params PaginationParams{{.ParameterDeclarations}}) (*PaginationResult[{{.ResultType}}], error) {
+	// Validate pagination parameters
+	if err := validatePaginationParams(params); err != nil {
+		return nil, err
+	}
+
+	// Build query with pagination
 	query := ` + "`" + `{{.SQL}}` + "`" + `
+	args := []interface{}{}
 	
-	rows, err := r.conn.Query(ctx, query, cursor, limit{{.ParameterArgs}})
+	// Add cursor condition if provided
+	if params.Cursor != "" {
+		cursorID, err := decodeCursor(params.Cursor)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor: %w", err)
+		}
+		args = append(args, cursorID)
+	}
+	
+	// Add limit (request one extra to determine hasMore)
+	args = append(args, params.Limit+1)
+	
+	// Add user parameters{{.ParameterArgs}}
+	
+	rows, err := r.conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -302,12 +336,17 @@ func (r *{{.RepositoryName}}) {{.FunctionName}}(ctx context.Context, cursor *uui
 	}
 	
 	// Calculate pagination metadata
-	hasMore := len(results) == int(limit)
+	hasMore := len(results) > int(params.Limit)
+	if hasMore {
+		// Remove the extra item
+		results = results[:params.Limit]
+	}
+	
 	var nextCursor string
 	if hasMore && len(results) > 0 {
 		// Use the last item's ID as the next cursor
-		// Note: This assumes the result has an ID field - this is a simplified implementation
-		nextCursor = "placeholder_cursor"
+		lastItem := results[len(results)-1]
+		nextCursor = encodeCursor(lastItem.GetID())
 	}
 	
 	return &PaginationResult[{{.ResultType}}]{

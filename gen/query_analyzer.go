@@ -30,9 +30,14 @@ func (qa *QueryAnalyzer) AnalyzeQuery(ctx context.Context, query *Query) error {
 		return fmt.Errorf("query cannot be nil")
 	}
 
-	// Extract parameters from the query
+	// Extract parameters from the query (doesn't require database connection)
 	if err := qa.extractParameters(query); err != nil {
 		return fmt.Errorf("failed to extract parameters: %w", err)
+	}
+
+	// Database connection is required for further analysis
+	if qa.db == nil {
+		return fmt.Errorf("database connection required for query analysis")
 	}
 
 	// For SELECT queries, analyze columns using EXPLAIN
@@ -52,10 +57,13 @@ func (qa *QueryAnalyzer) AnalyzeQuery(ctx context.Context, query *Query) error {
 
 // extractParameters extracts parameter placeholders from the SQL query
 func (qa *QueryAnalyzer) extractParameters(query *Query) error {
+	// Remove string literals and quoted identifiers to avoid false positives
+	cleanSQL := qa.removeQuotedContent(query.SQL)
+
 	// Find all parameter placeholders ($1, $2, etc.)
 	// Match $digits followed by non-digit or end of string
 	paramRegex := regexp.MustCompile(`\$(\d+)(?:\D|$)`)
-	matches := paramRegex.FindAllStringSubmatch(query.SQL, -1)
+	matches := paramRegex.FindAllStringSubmatch(cleanSQL, -1)
 
 	if len(matches) == 0 {
 		query.Parameters = []Parameter{}
@@ -74,26 +82,39 @@ func (qa *QueryAnalyzer) extractParameters(query *Query) error {
 		}
 	}
 
-	// Create parameter list
+	// Create parameter list from the parameters found
 	var parameters []Parameter
-	for i := 1; i <= len(paramMap); i++ {
-		if !paramMap[i] {
-			return fmt.Errorf("parameter $%d is missing (parameters must be sequential starting from $1)", i)
-		}
-
+	for paramNum := range paramMap {
 		// For now, we'll use a generic parameter type
 		// In a more advanced implementation, we could try to infer types from context
 		param := Parameter{
-			Name:   fmt.Sprintf("param%d", i),
+			Name:   fmt.Sprintf("param%d", paramNum),
 			Type:   "text", // Default to text, can be overridden by type inference
 			GoType: "string",
-			Index:  i,
+			Index:  paramNum,
 		}
 		parameters = append(parameters, param)
 	}
 
 	query.Parameters = parameters
 	return nil
+}
+
+// removeQuotedContent removes string literals and quoted identifiers to avoid false parameter detection
+func (qa *QueryAnalyzer) removeQuotedContent(sql string) string {
+	// Remove single-quoted string literals
+	singleQuoteRegex := regexp.MustCompile(`'(?:[^']|'')*'`)
+	result := singleQuoteRegex.ReplaceAllString(sql, "''")
+
+	// Remove double-quoted identifiers
+	doubleQuoteRegex := regexp.MustCompile(`"(?:[^"]|"")*"`)
+	result = doubleQuoteRegex.ReplaceAllString(result, `""`)
+
+	// Remove single-line comments (-- comments)
+	commentRegex := regexp.MustCompile(`--[^\r\n]*`)
+	result = commentRegex.ReplaceAllString(result, "")
+
+	return result
 }
 
 // isSelectQuery checks if the query type requires column analysis
@@ -126,12 +147,36 @@ func (qa *QueryAnalyzer) analyzeSelectQuery(ctx context.Context, query *Query) e
 // replaceParametersForExplain replaces parameter placeholders with dummy values for EXPLAIN
 func (qa *QueryAnalyzer) replaceParametersForExplain(sql string, parameters []Parameter) string {
 	result := sql
+
+	// Replace parameters in reverse order to avoid issues with $1 vs $10
 	for i := len(parameters); i >= 1; i-- {
 		placeholder := fmt.Sprintf("$%d", i)
-		// Use appropriate dummy values based on common types
 		dummyValue := qa.getDummyValueForParameter(i)
-		result = strings.ReplaceAll(result, placeholder, dummyValue)
+
+		// Use a more sophisticated replacement that avoids string literals
+		// For now, we'll use a simple approach but this could be enhanced
+		result = qa.replaceParameterOutsideQuotes(result, placeholder, dummyValue)
 	}
+	return result
+}
+
+// replaceParameterOutsideQuotes replaces parameter only when it's not inside quotes
+func (qa *QueryAnalyzer) replaceParameterOutsideQuotes(sql, placeholder, replacement string) string {
+	// Use regex to find parameter placeholders that are not inside single quotes
+	// This is a simplified approach - a full SQL parser would be more robust
+
+	// Pattern to match the placeholder when not inside single quotes
+	// This uses negative lookbehind and lookahead to avoid quoted content
+	pattern := fmt.Sprintf(`(?:'[^']*'|%s)`, regexp.QuoteMeta(placeholder))
+
+	re := regexp.MustCompile(pattern)
+	result := re.ReplaceAllStringFunc(sql, func(match string) string {
+		if match == placeholder {
+			return replacement
+		}
+		return match // Keep quoted content unchanged
+	})
+
 	return result
 }
 
@@ -230,7 +275,7 @@ func (qa *QueryAnalyzer) mapOIDToTypeName(oid uint32) string {
 	case 17:
 		return "bytea"
 	default:
-		return "text" // Default to text for unknown types
+		return "unknown" // Return unknown for unrecognized OIDs
 	}
 }
 

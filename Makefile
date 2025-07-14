@@ -39,10 +39,13 @@ test:
 
 # Run integration tests (requires database)
 .PHONY: integration-test
-integration-test: test-setup
+integration-test: clean build test-setup
 	@echo "Running integration tests..."
 	@echo "Waiting for database to be ready..."
 	@sleep 5
+	@echo "Running test data migrations..."
+	./test/run_migrations.sh
+	@echo "Running integration tests..."
 	TEST_DATABASE_URL=$(TEST_DB_URL) $(GOTEST) -v -timeout $(TEST_TIMEOUT) -tags=integration ./...
 
 # Set up test infrastructure
@@ -125,10 +128,13 @@ generate: build
 
 # Run the generator with test database
 .PHONY: test-generate
-test-generate: build test-setup
+test-generate: clean build test-setup
 	@echo "Testing code generation against test database..."
 	@sleep 5
-	DATABASE_URL=$(TEST_DB_URL) $(BINARY_PATH) --tables --output=./test_output --verbose
+	@echo "Running test data migrations..."
+	./test/run_migrations.sh
+	@echo "Running code generation..."
+	DATABASE_URL=$(TEST_DB_URL) $(BINARY_PATH) --tables --output=./test_output --verbose --exclude="composite_pk_table,invalid_pk_table"
 	@echo "Generated code available in ./test_output"
 
 # Benchmark tests

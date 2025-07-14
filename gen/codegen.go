@@ -518,6 +518,19 @@ func (cg *CodeGenerator) generateQueryCode(sourceFile string, queries []Query) (
 		"github.com/google/uuid",
 	}
 
+	// Check if any queries are paginated and add pagination imports
+	hasPaginatedQueries := false
+	for _, query := range queries {
+		if query.Type == QueryTypePaginated {
+			hasPaginatedQueries = true
+			break
+		}
+	}
+
+	if hasPaginatedQueries {
+		standardImports = append(standardImports, "fmt", "encoding/base64")
+	}
+
 	// Combine and deduplicate imports
 	allImports = cg.combineImports(standardImports, allImports)
 
@@ -556,6 +569,16 @@ func (cg *CodeGenerator) generateQueryCode(sourceFile string, queries []Query) (
 		}
 	}
 
+	// Generate pagination types and utilities if needed
+	if hasPaginatedQueries {
+		paginationCode, err := cg.generateInlinePaginationTypes()
+		if err != nil {
+			return "", fmt.Errorf("failed to generate pagination types: %w", err)
+		}
+		code.WriteString(paginationCode)
+		code.WriteString("\n\n")
+	}
+
 	// Generate repository struct and constructor
 	repoCode, err := cg.generateQueryRepository(sourceFile, queries)
 	if err != nil {
@@ -578,4 +601,69 @@ func (cg *CodeGenerator) generateQueryCode(sourceFile string, queries []Query) (
 	}
 
 	return code.String(), nil
+}
+
+// generateInlinePaginationTypes generates pagination types and utilities inline for query files
+func (cg *CodeGenerator) generateInlinePaginationTypes() (string, error) {
+	tmpl := `// PaginationParams holds parameters for cursor-based pagination
+type PaginationParams struct {
+	// Cursor is the base64-encoded UUID to start pagination from
+	// If empty, starts from the beginning
+	Cursor string ` + "`json:\"cursor,omitempty\"`" + `
+
+	// Limit is the maximum number of items to return
+	// Must be between 1 and 100, defaults to 20
+	Limit int32 ` + "`json:\"limit,omitempty\"`" + `
+}
+
+// PaginationResult holds the result of a paginated query
+type PaginationResult[T any] struct {
+	// Items is the list of items returned
+	Items []T ` + "`json:\"items\"`" + `
+
+	// HasMore indicates if there are more items available
+	HasMore bool ` + "`json:\"has_more\"`" + `
+
+	// NextCursor is the cursor for the next page
+	// Only set if HasMore is true
+	NextCursor string ` + "`json:\"next_cursor,omitempty\"`" + `
+}
+
+// encodeCursor encodes a UUID as a base64 cursor
+func encodeCursor(id uuid.UUID) string {
+	return base64.URLEncoding.EncodeToString(id[:])
+}
+
+// decodeCursor decodes a base64 cursor to a UUID
+func decodeCursor(cursor string) (uuid.UUID, error) {
+	if cursor == "" {
+		return uuid.UUID{}, nil
+	}
+
+	data, err := base64.URLEncoding.DecodeString(cursor)
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("invalid cursor format: %w", err)
+	}
+
+	if len(data) != 16 {
+		return uuid.UUID{}, fmt.Errorf("invalid cursor length: expected 16 bytes, got %d", len(data))
+	}
+
+	var id uuid.UUID
+	copy(id[:], data)
+	return id, nil
+}
+
+// validatePaginationParams validates pagination parameters
+func validatePaginationParams(params PaginationParams) error {
+	if params.Limit <= 0 {
+		return fmt.Errorf("limit must be positive, got %d", params.Limit)
+	}
+	if params.Limit > 100 {
+		return fmt.Errorf("limit too large: maximum 100, got %d", params.Limit)
+	}
+	return nil
+}`
+
+	return tmpl, nil
 }
