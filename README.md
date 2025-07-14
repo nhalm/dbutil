@@ -284,6 +284,111 @@ import "github.com/nhalm/dbutil/connection"
 conn, err := connection.NewConnection(ctx, "", sqlc.New)
 ```
 
+## Development & Testing Infrastructure
+
+### dbutil-gen Code Generator
+
+This package includes `dbutil-gen`, a database-first code generator that automatically creates Go repositories with CRUD operations and pagination from your PostgreSQL schema.
+
+#### Quick Start with dbutil-gen
+
+```bash
+# Install dependencies
+go mod tidy
+
+# Set up test infrastructure
+make dev-setup
+
+# Build the generator
+make build
+
+# Generate repositories from your database
+./bin/dbutil-gen --dsn="postgres://user:pass@localhost/db" --tables --output="./repositories"
+```
+
+#### Test Infrastructure
+
+The project includes comprehensive test infrastructure with Docker Compose:
+
+```bash
+# Start PostgreSQL test container
+make test-setup
+
+# Run unit tests
+make test
+
+# Run integration tests (requires database)
+make integration-test
+
+# Clean up everything
+make clean
+```
+
+#### Available Make Targets
+
+- `make build` - Build the dbutil-gen binary
+- `make test` - Run unit tests
+- `make integration-test` - Run integration tests with database
+- `make test-setup` - Start PostgreSQL test container
+- `make clean` - Clean up artifacts and containers
+- `make dev-setup` - Set up complete development environment
+- `make test-generate` - Test code generation against test database
+- `make db-shell` - Connect to test database shell
+- `make help` - Show all available targets
+
+#### Test Database
+
+The test infrastructure uses PostgreSQL 15 with a comprehensive test schema:
+
+- **Connection**: `postgres://dbutil:dbutil_test_password@localhost:5432/dbutil_test`
+- **Schema**: Includes all PostgreSQL data types, relationships, and edge cases
+- **Data**: Pre-populated with test data for realistic testing
+
+#### Database Schema
+
+The test schema includes:
+- **Users & Profiles** - One-to-one relationships
+- **Posts & Comments** - One-to-many and hierarchical relationships  
+- **Categories** - Many-to-many relationships via junction table
+- **Files** - Binary data and metadata
+- **Data Types Test** - Comprehensive PostgreSQL type coverage
+- **Edge Cases** - Invalid primary keys, composite keys, etc.
+
+#### Development Workflow
+
+1. **Setup**: `make dev-setup` - Sets up database and builds tools
+2. **Code**: Make changes to generator code
+3. **Test**: `make test` - Run unit tests
+4. **Integration**: `make integration-test` - Test with database
+5. **Generate**: `make test-generate` - Test code generation
+6. **Clean**: `make clean` - Clean up when done
+
+#### Configuration
+
+The generator supports various configuration options:
+
+```bash
+# Basic table generation
+dbutil-gen --dsn="postgres://..." --tables --output="./repos"
+
+# With custom schema and filtering
+dbutil-gen --dsn="postgres://..." --schema="app" --include="users,posts" --output="./repos"
+
+# With query files
+dbutil-gen --dsn="postgres://..." --queries="./sql" --output="./repos"
+
+# Using environment variables
+export DATABASE_URL="postgres://..."
+dbutil-gen --tables --output="./repos"
+```
+
+#### Requirements
+
+- **Go 1.21+** - For building and running
+- **Docker & Docker Compose** - For test infrastructure
+- **PostgreSQL 15** - Target database (via Docker)
+- **UUID v7 Primary Keys** - Required for pagination
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.

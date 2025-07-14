@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: dbutil-postgres
+    environment:
+      POSTGRES_DB: dbutil_test
+      POSTGRES_USER: dbutil
+      POSTGRES_PASSWORD: dbutil_test_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./test/sql:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbutil -d dbutil_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dbutil-network
+
+volumes:
+  postgres_data:
+
+networks:
+  dbutil-network:
+    driver: bridge 
