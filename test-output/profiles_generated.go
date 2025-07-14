@@ -5,6 +5,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -21,7 +22,7 @@ type Profiles struct {
 	Location    pgtype.Text        `json:"location" db:"location"`
 	BirthDate   pgtype.Timestamptz `json:"birth_date" db:"birth_date"`
 	Phone       pgtype.Text        `json:"phone" db:"phone"`
-	Preferences pgtype.JSON        `json:"preferences" db:"preferences"`
+	Preferences *json.RawMessage   `json:"preferences" db:"preferences"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at" db:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at" db:"updated_at"`
 }
@@ -97,7 +98,7 @@ type UpdateProfilesParams struct {
 	Location    pgtype.Text        `json:"location" db:"location"`
 	BirthDate   pgtype.Timestamptz `json:"birth_date" db:"birth_date"`
 	Phone       pgtype.Text        `json:"phone" db:"phone"`
-	Preferences pgtype.JSON        `json:"preferences" db:"preferences"`
+	Preferences *json.RawMessage   `json:"preferences" db:"preferences"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at" db:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at" db:"updated_at"`
 }

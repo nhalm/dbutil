@@ -143,9 +143,13 @@ func (qa *QueryAnalyzer) getDummyValueForParameter(paramIndex int) string {
 
 // analyzeQueryColumns analyzes the columns returned by a SELECT query
 func (qa *QueryAnalyzer) analyzeQueryColumns(ctx context.Context, query *Query) error {
+	// Remove trailing semicolon if present
+	sql := strings.TrimSpace(query.SQL)
+	sql = strings.TrimSuffix(sql, ";")
+
 	// Create a modified query that returns column information
 	// We'll use a LIMIT 0 query to get column metadata without executing the full query
-	limitedSQL := fmt.Sprintf("SELECT * FROM (%s) AS subquery LIMIT 0", query.SQL)
+	limitedSQL := fmt.Sprintf("SELECT * FROM (%s) AS subquery LIMIT 0", sql)
 
 	// Replace parameters with dummy values
 	analyzableSQL := qa.replaceParametersForExplain(limitedSQL, query.Parameters)

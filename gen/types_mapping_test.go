@@ -371,7 +371,7 @@ func TestTypeMapper_MapType(t *testing.T) {
 			pgType:     "bytea",
 			isNullable: true,
 			isArray:    false,
-			want:       "pgtype.Bytea",
+			want:       "*[]byte",
 			wantErr:    false,
 		},
 
@@ -397,7 +397,7 @@ func TestTypeMapper_MapType(t *testing.T) {
 			pgType:     "json",
 			isNullable: true,
 			isArray:    false,
-			want:       "pgtype.JSON",
+			want:       "*json.RawMessage",
 			wantErr:    false,
 		},
 
@@ -859,12 +859,12 @@ func TestTypeMapper_makeNullable(t *testing.T) {
 		{
 			name:   "json.RawMessage type",
 			goType: "json.RawMessage",
-			want:   "pgtype.JSON",
+			want:   "*json.RawMessage",
 		},
 		{
 			name:   "[]byte type",
 			goType: "[]byte",
-			want:   "pgtype.Bytea",
+			want:   "*[]byte",
 		},
 		{
 			name:   "array of strings",

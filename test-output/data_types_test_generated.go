@@ -5,6 +5,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -31,22 +32,22 @@ type DataTypesTest struct {
 	TimestamptzField  pgtype.Timestamptz `json:"timestamptz_field" db:"timestamptz_field"`
 	IntervalField     pgtype.Text        `json:"interval_field" db:"interval_field"`
 	UuidField         pgtype.UUID        `json:"uuid_field" db:"uuid_field"`
-	JsonField         pgtype.JSON        `json:"json_field" db:"json_field"`
-	JsonbField        pgtype.JSON        `json:"jsonb_field" db:"jsonb_field"`
+	JsonField         *json.RawMessage   `json:"json_field" db:"json_field"`
+	JsonbField        *json.RawMessage   `json:"jsonb_field" db:"jsonb_field"`
 	TextArrayField    []pgtype.Text      `json:"text_array_field" db:"text_array_field"`
 	IntegerArrayField []pgtype.Int4      `json:"integer_array_field" db:"integer_array_field"`
 	UuidArrayField    []pgtype.UUID      `json:"uuid_array_field" db:"uuid_array_field"`
 	InetField         pgtype.Text        `json:"inet_field" db:"inet_field"`
 	CidrField         pgtype.Text        `json:"cidr_field" db:"cidr_field"`
 	MacaddrField      pgtype.Text        `json:"macaddr_field" db:"macaddr_field"`
-	ByteaField        pgtype.Bytea       `json:"bytea_field" db:"bytea_field"`
+	ByteaField        *[]byte            `json:"bytea_field" db:"bytea_field"`
 	XmlField          pgtype.Text        `json:"xml_field" db:"xml_field"`
 	NullableText      pgtype.Text        `json:"nullable_text" db:"nullable_text"`
 	NullableInteger   pgtype.Int4        `json:"nullable_integer" db:"nullable_integer"`
 	NullableBoolean   pgtype.Bool        `json:"nullable_boolean" db:"nullable_boolean"`
 	NullableTimestamp pgtype.Timestamptz `json:"nullable_timestamp" db:"nullable_timestamp"`
 	NullableUuid      pgtype.UUID        `json:"nullable_uuid" db:"nullable_uuid"`
-	NullableJsonb     pgtype.JSON        `json:"nullable_jsonb" db:"nullable_jsonb"`
+	NullableJsonb     *json.RawMessage   `json:"nullable_jsonb" db:"nullable_jsonb"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at" db:"created_at"`
 }
 
@@ -103,22 +104,22 @@ type CreateDataTypesTestParams struct {
 	TimestamptzField  pgtype.Timestamptz `json:"timestamptz_field" db:"timestamptz_field"`
 	IntervalField     pgtype.Text        `json:"interval_field" db:"interval_field"`
 	UuidField         pgtype.UUID        `json:"uuid_field" db:"uuid_field"`
-	JsonField         pgtype.JSON        `json:"json_field" db:"json_field"`
-	JsonbField        pgtype.JSON        `json:"jsonb_field" db:"jsonb_field"`
+	JsonField         *json.RawMessage   `json:"json_field" db:"json_field"`
+	JsonbField        *json.RawMessage   `json:"jsonb_field" db:"jsonb_field"`
 	TextArrayField    []pgtype.Text      `json:"text_array_field" db:"text_array_field"`
 	IntegerArrayField []pgtype.Int4      `json:"integer_array_field" db:"integer_array_field"`
 	UuidArrayField    []pgtype.UUID      `json:"uuid_array_field" db:"uuid_array_field"`
 	InetField         pgtype.Text        `json:"inet_field" db:"inet_field"`
 	CidrField         pgtype.Text        `json:"cidr_field" db:"cidr_field"`
 	MacaddrField      pgtype.Text        `json:"macaddr_field" db:"macaddr_field"`
-	ByteaField        pgtype.Bytea       `json:"bytea_field" db:"bytea_field"`
+	ByteaField        *[]byte            `json:"bytea_field" db:"bytea_field"`
 	XmlField          pgtype.Text        `json:"xml_field" db:"xml_field"`
 	NullableText      pgtype.Text        `json:"nullable_text" db:"nullable_text"`
 	NullableInteger   pgtype.Int4        `json:"nullable_integer" db:"nullable_integer"`
 	NullableBoolean   pgtype.Bool        `json:"nullable_boolean" db:"nullable_boolean"`
 	NullableTimestamp pgtype.Timestamptz `json:"nullable_timestamp" db:"nullable_timestamp"`
 	NullableUuid      pgtype.UUID        `json:"nullable_uuid" db:"nullable_uuid"`
-	NullableJsonb     pgtype.JSON        `json:"nullable_jsonb" db:"nullable_jsonb"`
+	NullableJsonb     *json.RawMessage   `json:"nullable_jsonb" db:"nullable_jsonb"`
 }
 
 // Create creates a new DataTypesTest
@@ -157,22 +158,22 @@ type UpdateDataTypesTestParams struct {
 	TimestamptzField  pgtype.Timestamptz `json:"timestamptz_field" db:"timestamptz_field"`
 	IntervalField     pgtype.Text        `json:"interval_field" db:"interval_field"`
 	UuidField         pgtype.UUID        `json:"uuid_field" db:"uuid_field"`
-	JsonField         pgtype.JSON        `json:"json_field" db:"json_field"`
-	JsonbField        pgtype.JSON        `json:"jsonb_field" db:"jsonb_field"`
+	JsonField         *json.RawMessage   `json:"json_field" db:"json_field"`
+	JsonbField        *json.RawMessage   `json:"jsonb_field" db:"jsonb_field"`
 	TextArrayField    []pgtype.Text      `json:"text_array_field" db:"text_array_field"`
 	IntegerArrayField []pgtype.Int4      `json:"integer_array_field" db:"integer_array_field"`
 	UuidArrayField    []pgtype.UUID      `json:"uuid_array_field" db:"uuid_array_field"`
 	InetField         pgtype.Text        `json:"inet_field" db:"inet_field"`
 	CidrField         pgtype.Text        `json:"cidr_field" db:"cidr_field"`
 	MacaddrField      pgtype.Text        `json:"macaddr_field" db:"macaddr_field"`
-	ByteaField        pgtype.Bytea       `json:"bytea_field" db:"bytea_field"`
+	ByteaField        *[]byte            `json:"bytea_field" db:"bytea_field"`
 	XmlField          pgtype.Text        `json:"xml_field" db:"xml_field"`
 	NullableText      pgtype.Text        `json:"nullable_text" db:"nullable_text"`
 	NullableInteger   pgtype.Int4        `json:"nullable_integer" db:"nullable_integer"`
 	NullableBoolean   pgtype.Bool        `json:"nullable_boolean" db:"nullable_boolean"`
 	NullableTimestamp pgtype.Timestamptz `json:"nullable_timestamp" db:"nullable_timestamp"`
 	NullableUuid      pgtype.UUID        `json:"nullable_uuid" db:"nullable_uuid"`
-	NullableJsonb     pgtype.JSON        `json:"nullable_jsonb" db:"nullable_jsonb"`
+	NullableJsonb     *json.RawMessage   `json:"nullable_jsonb" db:"nullable_jsonb"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at" db:"created_at"`
 }
 

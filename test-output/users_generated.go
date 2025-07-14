@@ -5,6 +5,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -21,7 +22,7 @@ type Users struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at" db:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at" db:"updated_at"`
 	LastLogin         pgtype.Timestamptz `json:"last_login" db:"last_login"`
-	Metadata          pgtype.JSON        `json:"metadata" db:"metadata"`
+	Metadata          *json.RawMessage   `json:"metadata" db:"metadata"`
 	Age               pgtype.Int4        `json:"age" db:"age"`
 	Balance           pgtype.Float8      `json:"balance" db:"balance"`
 	ProfilePictureUrl pgtype.Text        `json:"profile_picture_url" db:"profile_picture_url"`
@@ -67,7 +68,7 @@ type CreateUsersParams struct {
 	Email             string             `json:"email" db:"email"`
 	PasswordHash      string             `json:"password_hash" db:"password_hash"`
 	LastLogin         pgtype.Timestamptz `json:"last_login" db:"last_login"`
-	Metadata          pgtype.JSON        `json:"metadata" db:"metadata"`
+	Metadata          *json.RawMessage   `json:"metadata" db:"metadata"`
 	Age               pgtype.Int4        `json:"age" db:"age"`
 	Balance           pgtype.Float8      `json:"balance" db:"balance"`
 	ProfilePictureUrl pgtype.Text        `json:"profile_picture_url" db:"profile_picture_url"`
@@ -99,7 +100,7 @@ type UpdateUsersParams struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at" db:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at" db:"updated_at"`
 	LastLogin         pgtype.Timestamptz `json:"last_login" db:"last_login"`
-	Metadata          pgtype.JSON        `json:"metadata" db:"metadata"`
+	Metadata          *json.RawMessage   `json:"metadata" db:"metadata"`
 	Age               pgtype.Int4        `json:"age" db:"age"`
 	Balance           pgtype.Float8      `json:"balance" db:"balance"`
 	ProfilePictureUrl pgtype.Text        `json:"profile_picture_url" db:"profile_picture_url"`

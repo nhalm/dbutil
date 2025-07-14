@@ -21,7 +21,8 @@ func NewTypeMapper(customMappings map[string]string) *TypeMapper {
 func (tm *TypeMapper) MapType(pgType string, isNullable bool, isArray bool) (string, error) {
 	// Check custom mappings first
 	if customType, exists := tm.customMappings[pgType]; exists {
-		return tm.applyNullableAndArray(customType, isNullable, isArray), nil
+		result := tm.applyNullableAndArray(customType, isNullable, isArray)
+		return result, nil
 	}
 
 	// Get the base Go type
@@ -30,7 +31,8 @@ func (tm *TypeMapper) MapType(pgType string, isNullable bool, isArray bool) (str
 		return "", err
 	}
 
-	return tm.applyNullableAndArray(baseType, isNullable, isArray), nil
+	result := tm.applyNullableAndArray(baseType, isNullable, isArray)
+	return result, nil
 }
 
 // getBaseGoType returns the base Go type for a PostgreSQL type
@@ -80,7 +82,7 @@ func (tm *TypeMapper) getBaseGoType(pgType string) (string, error) {
 	case "bytea":
 		return "[]byte", nil
 
-	// JSON types
+	// JSON types - use json.RawMessage for pgx v5
 	case "json", "jsonb":
 		return "json.RawMessage", nil
 
@@ -134,7 +136,8 @@ func (tm *TypeMapper) makeNullable(goType string) string {
 	// Handle special cases first
 	switch goType {
 	case "[]byte":
-		return "pgtype.Bytea"
+		// In pgx v5, there's no pgtype.Bytea, use pointer to []byte
+		return "*[]byte"
 	case "string":
 		return "pgtype.Text"
 	case "int16":
@@ -154,7 +157,8 @@ func (tm *TypeMapper) makeNullable(goType string) string {
 	case "uuid.UUID":
 		return "pgtype.UUID"
 	case "json.RawMessage":
-		return "pgtype.JSON"
+		// In pgx v5, there's no pgtype.JSON, use pointer to json.RawMessage
+		return "*json.RawMessage"
 	}
 
 	// Handle array types
@@ -236,6 +240,32 @@ func (tm *TypeMapper) MapTableColumns(table *Table) error {
 		}
 		table.Columns[i].GoType = goType
 	}
+	return nil
+}
+
+// MapQueryColumns maps all columns in a query and sets their GoType field
+func (tm *TypeMapper) MapQueryColumns(query *Query) error {
+	if query == nil {
+		return fmt.Errorf("query cannot be nil")
+	}
+
+	for i := range query.Columns {
+		goType, err := tm.MapType(query.Columns[i].Type, query.Columns[i].IsNullable, query.Columns[i].IsArray)
+		if err != nil {
+			return fmt.Errorf("failed to map type for column %s in query %s: %w", query.Columns[i].Name, query.Name, err)
+		}
+		query.Columns[i].GoType = goType
+	}
+
+	// Also map parameter types
+	for i := range query.Parameters {
+		goType, err := tm.MapType(query.Parameters[i].Type, false, false) // Parameters are typically not nullable
+		if err != nil {
+			return fmt.Errorf("failed to map type for parameter %d in query %s: %w", query.Parameters[i].Index, query.Name, err)
+		}
+		query.Parameters[i].GoType = goType
+	}
+
 	return nil
 }
 

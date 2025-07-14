@@ -5,6 +5,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,7 +24,7 @@ type Files struct {
 	StoragePath      string             `json:"storage_path" db:"storage_path"`
 	IsPublic         pgtype.Bool        `json:"is_public" db:"is_public"`
 	DownloadCount    pgtype.Int4        `json:"download_count" db:"download_count"`
-	Metadata         pgtype.JSON        `json:"metadata" db:"metadata"`
+	Metadata         *json.RawMessage   `json:"metadata" db:"metadata"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at" db:"created_at"`
 }
 
@@ -100,7 +101,7 @@ type UpdateFilesParams struct {
 	StoragePath      string             `json:"storage_path" db:"storage_path"`
 	IsPublic         pgtype.Bool        `json:"is_public" db:"is_public"`
 	DownloadCount    pgtype.Int4        `json:"download_count" db:"download_count"`
-	Metadata         pgtype.JSON        `json:"metadata" db:"metadata"`
+	Metadata         *json.RawMessage   `json:"metadata" db:"metadata"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at" db:"created_at"`
 }
 

@@ -5,6 +5,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -25,7 +26,7 @@ type Posts struct {
 	LikeCount        pgtype.Int4        `json:"like_count" db:"like_count"`
 	Tags             []pgtype.Text      `json:"tags" db:"tags"`
 	FeaturedImageUrl pgtype.Text        `json:"featured_image_url" db:"featured_image_url"`
-	SeoData          pgtype.JSON        `json:"seo_data" db:"seo_data"`
+	SeoData          *json.RawMessage   `json:"seo_data" db:"seo_data"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at" db:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at" db:"updated_at"`
 }
@@ -73,7 +74,7 @@ type CreatePostsParams struct {
 	Slug             string             `json:"slug" db:"slug"`
 	PublishedAt      pgtype.Timestamptz `json:"published_at" db:"published_at"`
 	FeaturedImageUrl pgtype.Text        `json:"featured_image_url" db:"featured_image_url"`
-	SeoData          pgtype.JSON        `json:"seo_data" db:"seo_data"`
+	SeoData          *json.RawMessage   `json:"seo_data" db:"seo_data"`
 }
 
 // Create creates a new Posts
@@ -106,7 +107,7 @@ type UpdatePostsParams struct {
 	LikeCount        pgtype.Int4        `json:"like_count" db:"like_count"`
 	Tags             []pgtype.Text      `json:"tags" db:"tags"`
 	FeaturedImageUrl pgtype.Text        `json:"featured_image_url" db:"featured_image_url"`
-	SeoData          pgtype.JSON        `json:"seo_data" db:"seo_data"`
+	SeoData          *json.RawMessage   `json:"seo_data" db:"seo_data"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at" db:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at" db:"updated_at"`
 }
