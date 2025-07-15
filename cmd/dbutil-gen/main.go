@@ -6,80 +6,149 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/nhalm/dbutil/gen"
 )
 
 func main() {
 	var (
-		dsn         = flag.String("dsn", "", "PostgreSQL connection string (or use DATABASE_URL env var)")
-		output      = flag.String("output", "./repositories", "Output directory for generated files")
-		schema      = flag.String("schema", "public", "Database schema to introspect")
-		queries     = flag.String("queries", "", "Directory containing SQL query files")
-		tables      = flag.Bool("tables", false, "Generate table-based repositories")
-		include     = flag.String("include", "", "Comma-separated list of tables to include")
-		exclude     = flag.String("exclude", "", "Comma-separated list of tables to exclude")
-		config      = flag.String("config", "", "Path to configuration file")
-		packageName = flag.String("package", "repositories", "Package name for generated code")
-		verbose     = flag.Bool("verbose", false, "Enable verbose logging")
+		config  = flag.String("config", "dbutil-gen.yaml", "Path to YAML configuration file")
+		help    = flag.Bool("help", false, "Show detailed help and examples")
+		version = flag.Bool("version", false, "Show version information")
 	)
+
+	// Custom usage function with better formatting
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `dbutil-gen - Database-first code generator for PostgreSQL
+
+USAGE:
+    dbutil-gen [options]
+
+DESCRIPTION:
+    Generate type-safe Go repositories with built-in pagination from PostgreSQL databases.
+    Supports both table-based generation (CRUD operations) and query-based generation
+    (custom SQL with sqlc-style annotations).
+
+REQUIREMENTS:
+    - PostgreSQL 12+ database
+    - Tables must have UUID primary keys for pagination
+    - Go 1.21+ for generated code
+
+OPTIONS:
+`)
+		flag.PrintDefaults()
+
+		fmt.Fprintf(os.Stderr, `
+EXAMPLES:
+    # Generate repositories using configuration file (recommended)
+    dbutil-gen
+
+    # Generate with custom config file
+    dbutil-gen --config="./my-config.yaml"
+
+    # Generate repositories for specific tables with CLI flags (basic usage)
+    dbutil-gen --dsn="postgres://user:pass@localhost/mydb" --tables --include="users,posts,comments"
+
+    # Use environment variable for connection (DATABASE_URL)
+    export DATABASE_URL="postgres://user:pass@localhost/mydb"
+    dbutil-gen --tables
+
+    # Use POSTGRES_* environment variables for connection
+    export POSTGRES_HOST="localhost"
+    export POSTGRES_PORT="5432"
+    export POSTGRES_USER="myuser"
+    export POSTGRES_PASSWORD="mypass"
+    export POSTGRES_DB="mydb"
+    dbutil-gen --tables
+
+    # Generate from SQL files with custom queries
+    dbutil-gen --dsn="postgres://..." --queries="./sql" --output="./repositories"
+
+    # Use configuration file
+    dbutil-gen --config="dbutil-gen.yaml"
+
+    # Verbose output for debugging
+    dbutil-gen --dsn="postgres://..." --tables --verbose
+
+ENVIRONMENT VARIABLES:
+    DATABASE_URL       PostgreSQL connection string (alternative to --dsn)
+    POSTGRES_HOST      Database host (default: localhost)
+    POSTGRES_PORT      Database port (default: 5432)
+    POSTGRES_USER      Database user (default: postgres)
+    POSTGRES_PASSWORD  Database password (default: empty)
+    POSTGRES_DB        Database name (default: postgres)
+    POSTGRES_SSLMODE   SSL mode (default: disable)
+
+CONFIGURATION FILE:
+    Create dbutil-gen.yaml:
+        database:
+          dsn: "postgres://user:pass@localhost/mydb"
+          schema: "public"
+        output:
+          directory: "./repositories"
+          package: "repositories"
+        tables:
+          users:
+            functions:
+              - "create"
+              - "get"
+              - "update"
+              - "delete"
+              - "list"
+          posts:
+            functions:
+              - "create"
+              - "get"
+              - "list"
+          comments:
+            functions:
+              - "create"
+              - "delete"
+        verbose: true
+
+GENERATED FILES:
+    Each table generates a *_generated.go file with:
+    - Struct representing the table
+    - Repository with CRUD operations
+    - Pagination support with cursor-based queries
+    - Type-safe parameter structs
+
+    Shared files:
+    - pagination.go: Common pagination types and utilities
+
+PAGINATION:
+    All generated repositories include efficient cursor-based pagination:
+    - ListPaginated(ctx, PaginationParams) (*PaginationResult[T], error)
+    - Uses UUID v7 time-ordering for consistent results
+    - O(log n) performance regardless of dataset size
+
+MORE INFO:
+    Documentation: https://github.com/nhalm/dbutil
+    Examples:      https://github.com/nhalm/dbutil/tree/main/examples
+    Issues:        https://github.com/nhalm/dbutil/issues
+
+`)
+	}
+
 	flag.Parse()
 
-	// Get DSN from environment if not provided
-	if *dsn == "" {
-		*dsn = os.Getenv("DATABASE_URL")
-	}
-
-	// TODO: try to pull env vars using the connection package.
-	if *dsn == "" {
-		fmt.Fprintf(os.Stderr, "Error: Database connection string required (use --dsn or DATABASE_URL)\n")
+	// Handle help and version flags
+	if *help {
 		flag.Usage()
-		os.Exit(1)
+		os.Exit(0)
 	}
 
-	// Validate that at least one generation mode is enabled
-	if !*tables && *queries == "" {
-		fmt.Fprintf(os.Stderr, "Error: Must specify --tables and/or --queries\n")
-		flag.Usage()
-		os.Exit(1)
+	if *version {
+		fmt.Println("dbutil-gen version 2.0.0")
+		fmt.Println("Database-first code generator for PostgreSQL")
+		fmt.Println("https://github.com/nhalm/dbutil")
+		os.Exit(0)
 	}
 
-	// Parse include/exclude lists
-	var includeList, excludeList []string
-	if *include != "" {
-		includeList = strings.Split(*include, ",")
-		for i := range includeList {
-			includeList[i] = strings.TrimSpace(includeList[i])
-		}
-	}
-	if *exclude != "" {
-		excludeList = strings.Split(*exclude, ",")
-		for i := range excludeList {
-			excludeList[i] = strings.TrimSpace(excludeList[i])
-		}
-	}
-
-	// Create generator configuration
-	cfg := &gen.Config{
-		DSN:         *dsn,
-		Schema:      *schema,
-		OutputDir:   *output,
-		PackageName: *packageName,
-		QueriesDir:  *queries,
-		Tables:      *tables,
-		Include:     includeList,
-		Exclude:     excludeList,
-		Verbose:     *verbose,
-	}
-
-	// Load config file if specified
-	if *config != "" {
-		fileConfig, err := gen.LoadConfig(*config)
-		if err != nil {
-			log.Fatalf("Failed to load config file: %v", err)
-		}
-		cfg = cfg.Merge(fileConfig)
+	// Load configuration file
+	cfg, err := gen.LoadConfig(*config)
+	if err != nil {
+		log.Fatalf("Failed to load config file: %v", err)
 	}
 
 	// Create and run generator
@@ -90,5 +159,5 @@ func main() {
 		log.Fatalf("Generation failed: %v", err)
 	}
 
-	fmt.Printf("Successfully generated code in %s\n", *output)
+	fmt.Printf("Successfully generated code in %s\n", cfg.OutputDir)
 }

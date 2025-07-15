@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,11 @@ func (qa *QueryAnalyzer) AnalyzeQuery(ctx context.Context, query *Query) error {
 	// Extract parameters from the query (doesn't require database connection)
 	if err := qa.extractParameters(query); err != nil {
 		return fmt.Errorf("failed to extract parameters: %w", err)
+	}
+
+	// If query is empty, no further analysis needed
+	if strings.TrimSpace(query.SQL) == "" {
+		return nil
 	}
 
 	// Database connection is required for further analysis
@@ -95,6 +101,11 @@ func (qa *QueryAnalyzer) extractParameters(query *Query) error {
 		}
 		parameters = append(parameters, param)
 	}
+
+	// Sort parameters by index to ensure consistent ordering
+	sort.Slice(parameters, func(i, j int) bool {
+		return parameters[i].Index < parameters[j].Index
+	})
 
 	query.Parameters = parameters
 	return nil

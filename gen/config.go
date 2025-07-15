@@ -24,7 +24,9 @@ type Config struct {
 
 	// Table filtering
 	Include []string `yaml:"include"`
-	Exclude []string `yaml:"exclude"`
+
+	// Table configurations (functions to generate per table)
+	TableConfigs map[string]TableConfig `yaml:"table_configs"`
 
 	// Options
 	Verbose bool `yaml:"verbose"`
@@ -45,12 +47,13 @@ type OutputConfig struct {
 	Package   string `yaml:"package"`
 }
 
-// TablesConfig represents table generation configuration
-type TablesConfig struct {
-	Enabled bool     `yaml:"enabled"`
-	Include []string `yaml:"include"`
-	Exclude []string `yaml:"exclude"`
+// TableConfig represents configuration for a specific table
+type TableConfig struct {
+	Functions []string `yaml:"functions"`
 }
+
+// TablesConfig represents table generation configuration
+type TablesConfig map[string]TableConfig
 
 // QueriesConfig represents query generation configuration
 type QueriesConfig struct {
@@ -85,16 +88,22 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// Extract table names from the new map structure
+	var tableNames []string
+	for tableName := range fileConfig.Tables {
+		tableNames = append(tableNames, tableName)
+	}
+
 	// Convert FileConfig to Config
 	cfg := &Config{
 		DSN:          fileConfig.Database.DSN,
 		Schema:       fileConfig.Database.Schema,
 		OutputDir:    fileConfig.Output.Directory,
 		PackageName:  fileConfig.Output.Package,
-		Tables:       fileConfig.Tables.Enabled,
+		Tables:       len(fileConfig.Tables) > 0,
 		QueriesDir:   fileConfig.Queries.Directory,
-		Include:      fileConfig.Tables.Include,
-		Exclude:      fileConfig.Tables.Exclude,
+		Include:      tableNames,
+		TableConfigs: fileConfig.Tables,
 		TypeMappings: fileConfig.Types.Mappings,
 	}
 
@@ -110,42 +119,6 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return cfg, nil
-}
-
-// Merge merges configuration from file with CLI flags (CLI takes precedence)
-func (c *Config) Merge(fileConfig *Config) *Config {
-	merged := *fileConfig // Start with file config
-
-	// Override with CLI values if they were set
-	if c.DSN != "" {
-		merged.DSN = c.DSN
-	}
-	if c.Schema != "" {
-		merged.Schema = c.Schema
-	}
-	if c.OutputDir != "" {
-		merged.OutputDir = c.OutputDir
-	}
-	if c.PackageName != "" {
-		merged.PackageName = c.PackageName
-	}
-	if c.QueriesDir != "" {
-		merged.QueriesDir = c.QueriesDir
-	}
-	if c.Tables {
-		merged.Tables = c.Tables
-	}
-	if len(c.Include) > 0 {
-		merged.Include = c.Include
-	}
-	if len(c.Exclude) > 0 {
-		merged.Exclude = c.Exclude
-	}
-	if c.Verbose {
-		merged.Verbose = c.Verbose
-	}
-
-	return &merged
 }
 
 // Validate checks if the configuration is valid
@@ -182,18 +155,11 @@ func (c *Config) GetOutputPath(filename string) string {
 	return filepath.Join(c.OutputDir, filename)
 }
 
-// ShouldIncludeTable checks if a table should be included based on include/exclude patterns
+// ShouldIncludeTable checks if a table should be included based on include patterns
 func (c *Config) ShouldIncludeTable(tableName string) bool {
-	// Check exclude patterns first
-	for _, pattern := range c.Exclude {
-		if matched, _ := filepath.Match(pattern, tableName); matched {
-			return false
-		}
-	}
-
-	// If no include patterns, include all (that aren't excluded)
+	// No include patterns means no tables are included
 	if len(c.Include) == 0 {
-		return true
+		return false
 	}
 
 	// Check include patterns
@@ -204,4 +170,13 @@ func (c *Config) ShouldIncludeTable(tableName string) bool {
 	}
 
 	return false
+}
+
+// GetTableFunctions returns the list of functions to generate for a specific table
+func (c *Config) GetTableFunctions(tableName string) []string {
+	if config, exists := c.TableConfigs[tableName]; exists {
+		return config.Functions
+	}
+	// Default to all CRUD operations if not specified
+	return []string{"create", "get", "update", "delete", "paginate"}
 }

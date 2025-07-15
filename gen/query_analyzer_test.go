@@ -686,8 +686,8 @@ func TestQueryAnalyzer_Integration(t *testing.T) {
 				},
 				expectedType: map[string]string{
 					"id":         "uuid",
-					"name":       "text",
-					"email":      "text",
+					"name":       "varchar",
+					"email":      "varchar",
 					"created_at": "timestamptz",
 				},
 			},
@@ -695,15 +695,15 @@ func TestQueryAnalyzer_Integration(t *testing.T) {
 				name: "data_types_test table",
 				query: Query{
 					Name: "DataTypesTest",
-					SQL:  "SELECT id, text_col, int_col, bool_col, json_col FROM data_types_test LIMIT 1",
+					SQL:  "SELECT id, text_field, integer_field, boolean_field, jsonb_field FROM data_types_test LIMIT 1",
 					Type: QueryTypeOne,
 				},
 				expectedType: map[string]string{
-					"id":       "uuid",
-					"text_col": "text",
-					"int_col":  "integer",
-					"bool_col": "boolean",
-					"json_col": "jsonb",
+					"id":            "uuid",
+					"text_field":    "text",
+					"integer_field": "integer",
+					"boolean_field": "boolean",
+					"jsonb_field":   "jsonb",
 				},
 			},
 		}

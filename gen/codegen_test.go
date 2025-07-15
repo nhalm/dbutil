@@ -71,7 +71,12 @@ func getTestConfig() *Config {
 	return &Config{
 		OutputDir:   "./test-output",
 		PackageName: "repositories",
-		Verbose:     false,
+		TableConfigs: map[string]TableConfig{
+			"users": {
+				Functions: []string{"create", "get", "update", "delete", "list", "paginate"},
+			},
+		},
+		Verbose: false,
 	}
 }
 

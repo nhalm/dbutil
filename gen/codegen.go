@@ -78,12 +78,6 @@ func (cg *CodeGenerator) generateTableCode(table Table) (string, error) {
 		return "", fmt.Errorf("failed to generate CRUD operations: %w", err)
 	}
 
-	// Generate paginated list method (uses shared pagination types)
-	paginatedListCode, err := cg.generatePaginatedListWithSharedTypes(table)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate paginated list: %w", err)
-	}
-
 	// Combine everything
 	var code strings.Builder
 
@@ -113,10 +107,6 @@ func (cg *CodeGenerator) generateTableCode(table Table) (string, error) {
 
 	// CRUD operations
 	code.WriteString(crudCode)
-
-	// Paginated list method
-	code.WriteString("\n\n")
-	code.WriteString(paginatedListCode)
 
 	return code.String(), nil
 }
@@ -216,7 +206,7 @@ func New{{.RepositoryName}}(conn *pgxpool.Pool) *{{.RepositoryName}} {
 	return result.String(), nil
 }
 
-// generateCRUDOperations generates all CRUD operations for a table
+// generateCRUDOperations generates specified CRUD operations for a table
 func (cg *CodeGenerator) generateCRUDOperations(table Table) (string, error) {
 	var code strings.Builder
 
@@ -226,27 +216,39 @@ func (cg *CodeGenerator) generateCRUDOperations(table Table) (string, error) {
 		return "", fmt.Errorf("failed to prepare template data: %w", err)
 	}
 
-	// Generate each CRUD operation
-	operations := []string{
-		getByIDTemplate,
-		createTemplate,
-		updateTemplate,
-		deleteTemplate,
-		listTemplate,
+	// Get the functions to generate for this table
+	functions := cg.config.GetTableFunctions(table.Name)
+
+	// Map function names to templates
+	operationTemplates := map[string]string{
+		"get":      getByIDTemplate,
+		"create":   createTemplate,
+		"update":   updateTemplate,
+		"delete":   deleteTemplate,
+		"list":     listTemplate,
+		"paginate": sharedListPaginatedTemplate,
 	}
 
-	for i, tmplStr := range operations {
-		if i > 0 {
+	// Generate each requested CRUD operation
+	first := true
+	for _, function := range functions {
+		tmplStr, exists := operationTemplates[function]
+		if !exists {
+			return "", fmt.Errorf("unknown function type: %s", function)
+		}
+
+		if !first {
 			code.WriteString("\n\n")
 		}
+		first = false
 
 		tmpl, err := template.New("crud").Parse(tmplStr)
 		if err != nil {
-			return "", fmt.Errorf("failed to parse template: %w", err)
+			return "", fmt.Errorf("failed to parse template for %s: %w", function, err)
 		}
 
 		if err := tmpl.Execute(&code, data); err != nil {
-			return "", fmt.Errorf("failed to execute template: %w", err)
+			return "", fmt.Errorf("failed to execute template for %s: %w", function, err)
 		}
 	}
 

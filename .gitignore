@@ -46,6 +46,9 @@ coverage.html
 *.tmp
 *.temp
 
+# Docker files
+.dockerignore
+
 # Claude AI directory
 .claude/
 

@@ -108,7 +108,7 @@ func (g *Generator) generateTables(ctx context.Context) error {
 		log.Printf("Found %d tables in schema '%s'", len(tables), g.config.Schema)
 	}
 
-	// Filter tables based on include/exclude patterns
+	// Filter tables based on include patterns
 	var filteredTables []Table
 	for _, table := range tables {
 		if g.config.ShouldIncludeTable(table.Name) {
