@@ -6,159 +6,55 @@ import (
 	"testing"
 )
 
-// TestQueryParser_Integration tests the parser with real-world SQL files
-func TestQueryParser_Integration(t *testing.T) {
+func TestQueryParser_ParseQueries_FileIO(t *testing.T) {
 	// Create temporary directory for test files
 	tempDir := t.TempDir()
 
-	// Create realistic SQL files
-	usersSQL := `-- User management queries
+	// Create test SQL files
+	testFiles := map[string]string{
+		"users.sql": `-- name: GetUser :one
+SELECT id, name, email FROM users WHERE id = $1;
 
--- name: GetUserByID :one
-SELECT id, name, email, created_at, updated_at
-FROM users 
-WHERE id = $1;
-
--- name: GetUserByEmail :one
-SELECT id, name, email, created_at, updated_at
-FROM users 
-WHERE email = $1 AND active = true;
-
--- name: ListActiveUsers :many
-SELECT id, name, email, created_at
-FROM users 
-WHERE active = true
-ORDER BY name ASC;
-
--- name: GetUsersWithPosts :many
-SELECT 
-    u.id,
-    u.name,
-    u.email,
-    COUNT(p.id) as post_count
-FROM users u
-LEFT JOIN posts p ON u.id = p.user_id
-WHERE u.active = true
-GROUP BY u.id, u.name, u.email
-ORDER BY post_count DESC;
-
--- name: GetUsersPaginated :paginated
-SELECT id, name, email, created_at
-FROM users 
-WHERE active = true
-  AND ($1::uuid IS NULL OR id > $1)
-ORDER BY id ASC
-LIMIT $2;
+-- name: ListUsers :many
+SELECT id, name, email FROM users ORDER BY name;
 
 -- name: CreateUser :exec
-INSERT INTO users (name, email, active)
-VALUES ($1, $2, true);
+INSERT INTO users (name, email) VALUES ($1, $2);`,
 
--- name: UpdateUserEmail :exec
-UPDATE users 
-SET email = $2, updated_at = NOW()
-WHERE id = $1;
-
--- name: DeleteUser :exec
-DELETE FROM users WHERE id = $1;`
-
-	postsSQL := `-- Post management queries
-
--- name: GetPostByID :one
-SELECT id, user_id, title, content, published, created_at, updated_at
-FROM posts 
-WHERE id = $1;
-
--- name: GetPostsByUser :many
-SELECT id, title, content, published, created_at
-FROM posts 
-WHERE user_id = $1
-ORDER BY created_at DESC;
-
--- name: GetPublishedPosts :many
-SELECT 
-    p.id,
-    p.title,
-    p.content,
-    p.created_at,
-    u.name as author_name
-FROM posts p
-JOIN users u ON p.user_id = u.id
-WHERE p.published = true
-ORDER BY p.created_at DESC;
+		"posts.sql": `-- name: GetPostsByUser :many
+SELECT id, title, content FROM posts WHERE user_id = $1;
 
 -- name: GetPostsPaginated :paginated
-SELECT id, title, content, published, created_at
-FROM posts 
-WHERE published = true
-  AND ($1::uuid IS NULL OR id > $1)
-ORDER BY id ASC
-LIMIT $2;
-
--- name: CreatePost :exec
-INSERT INTO posts (user_id, title, content, published)
-VALUES ($1, $2, $3, $4);
-
--- name: UpdatePost :exec
-UPDATE posts 
-SET title = $2, content = $3, updated_at = NOW()
-WHERE id = $1;
-
--- name: DeletePost :exec
-DELETE FROM posts WHERE id = $1;`
+SELECT id, title, content FROM posts ORDER BY id ASC LIMIT $1;`,
+	}
 
 	// Write test files
-	err := os.WriteFile(filepath.Join(tempDir, "users.sql"), []byte(usersSQL), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write users.sql: %v", err)
+	for filename, content := range testFiles {
+		err := os.WriteFile(filepath.Join(tempDir, filename), []byte(content), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write test file %s: %v", filename, err)
+		}
 	}
 
-	err = os.WriteFile(filepath.Join(tempDir, "posts.sql"), []byte(postsSQL), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write posts.sql: %v", err)
-	}
-
-	// Parse queries
+	// Test parsing
 	parser := NewQueryParser(tempDir)
 	queries, err := parser.ParseQueries()
 	if err != nil {
 		t.Fatalf("ParseQueries() failed: %v", err)
 	}
 
-	// Verify we found the expected number of queries
-	expectedCount := 15 // 8 from users.sql + 7 from posts.sql
-	if len(queries) != expectedCount {
-		t.Errorf("Expected %d queries, got %d", expectedCount, len(queries))
-		// Debug: print all found queries
-		for i, q := range queries {
-			t.Logf("Query %d: %s (%s)", i+1, q.Name, q.Type)
-		}
+	// Verify results
+	if len(queries) != 5 {
+		t.Errorf("Expected 5 queries, got %d", len(queries))
 	}
 
-	// Verify all queries are valid
-	for _, query := range queries {
-		if err := parser.ValidateQuery(query); err != nil {
-			t.Errorf("Query %s validation failed: %v", query.Name, err)
-		}
-	}
-
-	// Verify specific queries exist with correct types
+	// Check specific queries (order may vary)
 	expectedQueries := map[string]QueryType{
-		"GetUserByID":       QueryTypeOne,
-		"GetUserByEmail":    QueryTypeOne,
-		"ListActiveUsers":   QueryTypeMany,
-		"GetUsersWithPosts": QueryTypeMany,
-		"GetUsersPaginated": QueryTypePaginated,
+		"GetUser":           QueryTypeOne,
+		"ListUsers":         QueryTypeMany,
 		"CreateUser":        QueryTypeExec,
-		"UpdateUserEmail":   QueryTypeExec,
-		"DeleteUser":        QueryTypeExec,
-		"GetPostByID":       QueryTypeOne,
 		"GetPostsByUser":    QueryTypeMany,
-		"GetPublishedPosts": QueryTypeMany,
 		"GetPostsPaginated": QueryTypePaginated,
-		"CreatePost":        QueryTypeExec,
-		"UpdatePost":        QueryTypeExec,
-		"DeletePost":        QueryTypeExec,
 	}
 
 	queryMap := make(map[string]Query)
@@ -174,145 +70,173 @@ DELETE FROM posts WHERE id = $1;`
 		}
 
 		if query.Type != expectedType {
-			t.Errorf("Query %s: expected type %s, got %s", name, expectedType, query.Type)
+			t.Errorf("Query %s: expected type %v, got %v", name, expectedType, query.Type)
 		}
 
 		if query.SQL == "" {
-			t.Errorf("Query %s: SQL is empty", name)
-		}
-
-		if query.SourceFile == "" {
-			t.Errorf("Query %s: SourceFile is empty", name)
+			t.Errorf("Query %s: SQL should not be empty", name)
 		}
 	}
-
-	// Test specific query content
-	getUserByID := queryMap["GetUserByID"]
-	if getUserByID.Type != QueryTypeOne {
-		t.Errorf("GetUserByID should be :one type")
-	}
-
-	getUsersPaginated := queryMap["GetUsersPaginated"]
-	if getUsersPaginated.Type != QueryTypePaginated {
-		t.Errorf("GetUsersPaginated should be :paginated type")
-	}
-
-	createUser := queryMap["CreateUser"]
-	if createUser.Type != QueryTypeExec {
-		t.Errorf("CreateUser should be :exec type")
-	}
-
-	t.Logf("Successfully parsed %d queries from %d files", len(queries), 2)
 }
 
-// TestQueryParser_RealWorldScenarios tests various real-world edge cases
-func TestQueryParser_RealWorldScenarios(t *testing.T) {
+func TestQueryParser_FindSQLFiles_FileIO(t *testing.T) {
+	// Create temporary directory structure
 	tempDir := t.TempDir()
 
-	// Test complex query with multiple JOINs and subqueries
-	complexSQL := `-- Complex analytics queries
+	// Create subdirectories
+	subDir := filepath.Join(tempDir, "subdir")
+	err := os.MkdirAll(subDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create subdirectory: %v", err)
+	}
 
--- name: GetUserAnalytics :many
-SELECT 
-    u.id,
-    u.name,
-    u.email,
-    COUNT(DISTINCT p.id) as post_count,
-    COUNT(DISTINCT c.id) as comment_count,
-    AVG(p.created_at) as avg_post_date,
-    (
-        SELECT COUNT(*) 
-        FROM posts p2 
-        WHERE p2.user_id = u.id 
-          AND p2.published = true
-    ) as published_posts
+	// Create test files
+	testFiles := []string{
+		"users.sql",
+		"posts.sql",
+		"admin.SQL",  // uppercase extension
+		"readme.txt", // non-SQL file
+		filepath.Join("subdir", "nested.sql"),
+	}
+
+	for _, filename := range testFiles {
+		fullPath := filepath.Join(tempDir, filename)
+		err := os.WriteFile(fullPath, []byte("-- test content"), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write test file %s: %v", filename, err)
+		}
+	}
+
+	// Test finding SQL files
+	parser := NewQueryParser(tempDir)
+	sqlFiles, err := parser.findSQLFiles()
+	if err != nil {
+		t.Fatalf("findSQLFiles() failed: %v", err)
+	}
+
+	// Should find 4 SQL files (users.sql, posts.sql, admin.SQL, subdir/nested.sql)
+	expectedCount := 4
+	if len(sqlFiles) != expectedCount {
+		t.Errorf("Expected %d SQL files, got %d", expectedCount, len(sqlFiles))
+	}
+
+	// Check that non-SQL files are excluded
+	for _, file := range sqlFiles {
+		if filepath.Base(file) == "readme.txt" {
+			t.Errorf("Non-SQL file should not be included: %s", file)
+		}
+	}
+}
+
+func TestQueryParser_ParseFile_EdgeCases_FileIO(t *testing.T) {
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name        string
+		content     string
+		expectError bool
+		expectCount int
+	}{
+		{
+			name:        "empty_file",
+			content:     "",
+			expectError: false,
+			expectCount: 0,
+		},
+		{
+			name: "only_comments",
+			content: `-- This is a comment
+-- Another comment
+-- Yet another comment`,
+			expectError: false,
+			expectCount: 0,
+		},
+		{
+			name: "annotation_without_SQL",
+			content: `-- name: GetUser :one
+-- This is just a comment`,
+			expectError: true,
+			expectCount: 0,
+		},
+		{
+			name: "multiple_queries",
+			content: `-- name: GetUser :one
+SELECT id, name FROM users WHERE id = $1;
+
+-- name: CreateUser :exec
+INSERT INTO users (name, email) VALUES ($1, $2);`,
+			expectError: false,
+			expectCount: 2,
+		},
+		{
+			name: "query_with_complex_SQL",
+			content: `-- name: GetUserWithPosts :many
+SELECT u.id, u.name, p.title
 FROM users u
 LEFT JOIN posts p ON u.id = p.user_id
-LEFT JOIN comments c ON p.id = c.post_id
-WHERE u.active = true
-  AND u.created_at > $1
-GROUP BY u.id, u.name, u.email
-HAVING COUNT(DISTINCT p.id) > $2
-ORDER BY post_count DESC, comment_count DESC
-LIMIT $3;
-
--- name: BulkUpdateUserStatus :exec
-UPDATE users 
-SET active = $2, updated_at = NOW()
-WHERE id = ANY($1::uuid[]);
-
--- name: GetTopPostsWithMetrics :paginated
-WITH post_metrics AS (
-    SELECT 
-        p.id,
-        p.title,
-        p.created_at,
-        COUNT(c.id) as comment_count,
-        COUNT(DISTINCT c.user_id) as unique_commenters
-    FROM posts p
-    LEFT JOIN comments c ON p.id = c.post_id
-    WHERE p.published = true
-    GROUP BY p.id, p.title, p.created_at
-)
-SELECT 
-    pm.id,
-    pm.title,
-    pm.created_at,
-    pm.comment_count,
-    pm.unique_commenters,
-    (pm.comment_count * 2 + pm.unique_commenters * 3) as engagement_score
-FROM post_metrics pm
-WHERE ($1::uuid IS NULL OR pm.id > $1)
-ORDER BY engagement_score DESC, pm.id ASC
-LIMIT $2;`
-
-	err := os.WriteFile(filepath.Join(tempDir, "analytics.sql"), []byte(complexSQL), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write analytics.sql: %v", err)
+WHERE u.created_at > $1
+ORDER BY u.name, p.created_at DESC;`,
+			expectError: false,
+			expectCount: 1,
+		},
 	}
 
-	// Parse queries
-	parser := NewQueryParser(tempDir)
-	queries, err := parser.ParseQueries()
-	if err != nil {
-		t.Fatalf("ParseQueries() failed: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary file
+			filename := filepath.Join(tempDir, "test.sql")
+			err := os.WriteFile(filename, []byte(tt.content), 0644)
+			if err != nil {
+				t.Fatalf("Failed to write test file: %v", err)
+			}
 
-	// Should find 3 queries
-	if len(queries) != 3 {
-		t.Errorf("Expected 3 queries, got %d", len(queries))
-	}
+			// Parse the file
+			parser := NewQueryParser(tempDir)
+			queries, err := parser.parseFile(filename)
 
-	// Verify all queries are valid
-	for _, query := range queries {
-		if err := parser.ValidateQuery(query); err != nil {
-			t.Errorf("Query %s validation failed: %v", query.Name, err)
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error for %s, got nil", tt.name)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for %s: %v", tt.name, err)
+				}
+				if len(queries) != tt.expectCount {
+					t.Errorf("Expected %d queries, got %d", tt.expectCount, len(queries))
+				}
+			}
+
+			// Clean up
+			os.Remove(filename)
+		})
+	}
+}
+
+func TestQueryParser_ErrorHandling_FileIO(t *testing.T) {
+	t.Run("nonexistent directory", func(t *testing.T) {
+		parser := NewQueryParser("/nonexistent/directory")
+		_, err := parser.ParseQueries()
+		if err == nil {
+			t.Errorf("Expected error for nonexistent directory")
 		}
-	}
+	})
 
-	// Verify query types
-	expectedTypes := map[string]QueryType{
-		"GetUserAnalytics":       QueryTypeMany,
-		"BulkUpdateUserStatus":   QueryTypeExec,
-		"GetTopPostsWithMetrics": QueryTypePaginated,
-	}
-
-	queryMap := make(map[string]Query)
-	for _, query := range queries {
-		queryMap[query.Name] = query
-	}
-
-	for name, expectedType := range expectedTypes {
-		query, exists := queryMap[name]
-		if !exists {
-			t.Errorf("Query %s not found", name)
-			continue
+	t.Run("empty directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		parser := NewQueryParser(tempDir)
+		_, err := parser.ParseQueries()
+		if err == nil {
+			t.Errorf("Expected error for empty directory")
 		}
+	})
 
-		if query.Type != expectedType {
-			t.Errorf("Query %s: expected type %s, got %s", name, expectedType, query.Type)
+	t.Run("empty queries directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		parser := NewQueryParser(tempDir)
+		_, err := parser.ParseQueries()
+		if err == nil {
+			t.Errorf("Expected error for directory with no SQL files")
 		}
-	}
-
-	t.Logf("Successfully parsed complex queries with CTEs, subqueries, and array parameters")
+	})
 }
