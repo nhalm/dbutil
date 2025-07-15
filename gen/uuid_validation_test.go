@@ -2,6 +2,7 @@ package gen
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -115,7 +116,7 @@ func TestUUIDValidation_InvalidTables(t *testing.T) {
 		// Verify the error message is clear
 		expectedSubstrings := []string{"must be UUID type", "id"}
 		for _, substring := range expectedSubstrings {
-			if err != nil && !contains(err.Error(), substring) {
+			if err != nil && !strings.Contains(err.Error(), substring) {
 				t.Errorf("Error message should contain '%s', got: %s", substring, err.Error())
 			}
 		}
@@ -137,89 +138,6 @@ func TestUUIDValidation_InvalidTables(t *testing.T) {
 		// Since there's no single primary key column, we can't validate it
 		// This is expected behavior for composite keys
 	})
-}
-
-func TestUUIDValidation_ErrorMessages(t *testing.T) {
-	typeMapper := NewTypeMapper(nil)
-
-	testCases := []struct {
-		name           string
-		column         Column
-		expectError    bool
-		errorSubstring string
-	}{
-		{
-			name: "non_uuid_type",
-			column: Column{
-				Name:       "id",
-				Type:       "integer",
-				IsNullable: false,
-				IsArray:    false,
-			},
-			expectError:    true,
-			errorSubstring: "must be UUID type",
-		},
-		{
-			name: "nullable_uuid",
-			column: Column{
-				Name:       "id",
-				Type:       "uuid",
-				IsNullable: true,
-				IsArray:    false,
-			},
-			expectError:    true,
-			errorSubstring: "cannot be nullable",
-		},
-		{
-			name: "uuid_array",
-			column: Column{
-				Name:       "id",
-				Type:       "uuid",
-				IsNullable: false,
-				IsArray:    true,
-			},
-			expectError:    true,
-			errorSubstring: "cannot be an array",
-		},
-		{
-			name: "valid_uuid",
-			column: Column{
-				Name:       "id",
-				Type:       "uuid",
-				IsNullable: false,
-				IsArray:    false,
-			},
-			expectError: false,
-		},
-		{
-			name: "uppercase_uuid",
-			column: Column{
-				Name:       "id",
-				Type:       "UUID",
-				IsNullable: false,
-				IsArray:    false,
-			},
-			expectError: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := typeMapper.ValidateUUIDPrimaryKey(&tc.column)
-
-			if tc.expectError {
-				if err == nil {
-					t.Errorf("Expected error for %s, got nil", tc.name)
-				} else if !contains(err.Error(), tc.errorSubstring) {
-					t.Errorf("Error message should contain '%s', got: %s", tc.errorSubstring, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no error for %s, got: %v", tc.name, err)
-				}
-			}
-		})
-	}
 }
 
 func TestUUIDValidation_Integration_AllTables(t *testing.T) {
@@ -356,23 +274,4 @@ func TestUUIDValidation_PRDRequirement(t *testing.T) {
 			// generating UUIDs, not at the database schema level.
 		})
 	}
-}
-
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) &&
-		(s == substr ||
-			(len(s) > len(substr) &&
-				(s[:len(substr)] == substr ||
-					s[len(s)-len(substr):] == substr ||
-					containsSubstring(s, substr))))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

@@ -3,6 +3,7 @@ package gen
 import (
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -95,6 +96,73 @@ func TestTypeMapper_MapType(t *testing.T) {
 	}
 }
 
+// TestTypeMapper_MapType_NullableArrays - test nullable array type combinations
+func TestTypeMapper_MapType_NullableArrays(t *testing.T) {
+	typeMapper := NewTypeMapper(nil)
+
+	testCases := []struct {
+		name         string
+		pgType       string
+		isNullable   bool
+		isArray      bool
+		expectedType string
+		expectError  bool
+	}{
+		{
+			name:         "nullable_text_array",
+			pgType:       "text",
+			isNullable:   true,
+			isArray:      true,
+			expectedType: "[]pgtype.Text",
+			expectError:  false,
+		},
+		{
+			name:         "nullable_uuid_array",
+			pgType:       "uuid",
+			isNullable:   true,
+			isArray:      true,
+			expectedType: "[]pgtype.UUID",
+			expectError:  false,
+		},
+		{
+			name:         "non_nullable_text_array",
+			pgType:       "text",
+			isNullable:   false,
+			isArray:      true,
+			expectedType: "[]string",
+			expectError:  false,
+		},
+		{
+			name:         "nullable_non_array_text",
+			pgType:       "text",
+			isNullable:   true,
+			isArray:      false,
+			expectedType: "pgtype.Text",
+			expectError:  false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			goType, err := typeMapper.MapType(tc.pgType, tc.isNullable, tc.isArray)
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error for %s, got nil", tc.name)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for %s: %v", tc.name, err)
+				}
+				if goType != tc.expectedType {
+					t.Errorf("MapType(%s, %v, %v) = %s, want %s",
+						tc.pgType, tc.isNullable, tc.isArray, goType, tc.expectedType)
+				}
+			}
+		})
+	}
+}
+
 func TestTypeMapper_MapType_WithCustomMappings(t *testing.T) {
 	customMappings := map[string]string{
 		"custom_type": "MyCustomType",
@@ -124,6 +192,86 @@ func TestTypeMapper_MapType_WithCustomMappings(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("MapType() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestTypeMapper_MapType_CustomMappingsEdgeCases - test custom type mapping edge cases
+func TestTypeMapper_MapType_CustomMappingsEdgeCases(t *testing.T) {
+	customMappings := map[string]string{
+		"custom_type": "CustomStruct",
+		"enum_type":   "EnumType",
+	}
+
+	typeMapper := NewTypeMapper(customMappings)
+
+	testCases := []struct {
+		name         string
+		pgType       string
+		isNullable   bool
+		isArray      bool
+		expectedType string
+		expectError  bool
+	}{
+		{
+			name:         "custom_type",
+			pgType:       "custom_type",
+			isNullable:   false,
+			isArray:      false,
+			expectedType: "CustomStruct",
+			expectError:  false,
+		},
+		{
+			name:         "nullable_custom_type",
+			pgType:       "custom_type",
+			isNullable:   true,
+			isArray:      false,
+			expectedType: "*CustomStruct",
+			expectError:  false,
+		},
+		{
+			name:         "custom_type_array",
+			pgType:       "custom_type",
+			isNullable:   false,
+			isArray:      true,
+			expectedType: "[]CustomStruct",
+			expectError:  false,
+		},
+		{
+			name:         "nullable_custom_type_array",
+			pgType:       "custom_type",
+			isNullable:   true,
+			isArray:      true,
+			expectedType: "[]*CustomStruct",
+			expectError:  false,
+		},
+		{
+			name:         "override_builtin_type",
+			pgType:       "text",
+			isNullable:   false,
+			isArray:      false,
+			expectedType: "string", // Should still use built-in mapping
+			expectError:  false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			goType, err := typeMapper.MapType(tc.pgType, tc.isNullable, tc.isArray)
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error for %s, got nil", tc.name)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for %s: %v", tc.name, err)
+				}
+				if goType != tc.expectedType {
+					t.Errorf("MapType(%s, %v, %v) = %s, want %s",
+						tc.pgType, tc.isNullable, tc.isArray, goType, tc.expectedType)
+				}
 			}
 		})
 	}
@@ -187,6 +335,102 @@ func TestTypeMapper_GetRequiredImports(t *testing.T) {
 	}
 }
 
+// TestTypeMapper_GetRequiredImports_EdgeCases - test import generation edge cases
+func TestTypeMapper_GetRequiredImports_EdgeCases(t *testing.T) {
+	typeMapper := NewTypeMapper(nil)
+
+	testCases := []struct {
+		name            string
+		columns         []Column
+		expectedImports []string
+	}{
+		{
+			name:            "no_columns",
+			columns:         []Column{},
+			expectedImports: []string{},
+		},
+		{
+			name: "only_basic_types",
+			columns: []Column{
+				{Type: "text", IsNullable: false, IsArray: false},
+				{Type: "integer", IsNullable: false, IsArray: false},
+				{Type: "boolean", IsNullable: false, IsArray: false},
+			},
+			expectedImports: []string{},
+		},
+		{
+			name: "mixed_imports",
+			columns: []Column{
+				{Type: "uuid", IsNullable: false, IsArray: false},
+				{Type: "text", IsNullable: true, IsArray: false},
+				{Type: "timestamp", IsNullable: false, IsArray: false},
+				{Type: "json", IsNullable: false, IsArray: false},
+			},
+			expectedImports: []string{
+				"encoding/json",
+				"github.com/google/uuid",
+				"github.com/jackc/pgx/v5/pgtype",
+				"time",
+			},
+		},
+		{
+			name: "duplicate_imports",
+			columns: []Column{
+				{Type: "uuid", IsNullable: false, IsArray: false},
+				{Type: "uuid", IsNullable: true, IsArray: false},
+				{Type: "uuid", IsNullable: false, IsArray: true},
+			},
+			expectedImports: []string{
+				"github.com/google/uuid",
+				"github.com/jackc/pgx/v5/pgtype",
+			},
+		},
+		{
+			name:            "nil_columns",
+			columns:         nil,
+			expectedImports: []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			imports := typeMapper.GetRequiredImports(tc.columns)
+
+			if imports == nil {
+				t.Error("GetRequiredImports should return empty slice, not nil")
+			}
+
+			if len(imports) != len(tc.expectedImports) {
+				t.Errorf("Expected %d imports, got %d: %v",
+					len(tc.expectedImports), len(imports), imports)
+			}
+
+			// Convert to maps for easier comparison
+			importMap := make(map[string]bool)
+			for _, imp := range imports {
+				importMap[imp] = true
+			}
+
+			expectedMap := make(map[string]bool)
+			for _, imp := range tc.expectedImports {
+				expectedMap[imp] = true
+			}
+
+			for expectedImport := range expectedMap {
+				if !importMap[expectedImport] {
+					t.Errorf("Missing expected import: %s", expectedImport)
+				}
+			}
+
+			for actualImport := range importMap {
+				if !expectedMap[actualImport] {
+					t.Errorf("Unexpected import: %s", actualImport)
+				}
+			}
+		})
+	}
+}
+
 func TestTypeMapper_MapTableColumns(t *testing.T) {
 	tm := NewTypeMapper(nil)
 
@@ -234,15 +478,39 @@ func TestTypeMapper_ValidateUUIDPrimaryKey(t *testing.T) {
 	tm := NewTypeMapper(nil)
 
 	tests := []struct {
-		name    string
-		column  Column
-		wantErr bool
+		name           string
+		column         Column
+		wantErr        bool
+		errorSubstring string
 	}{
-		{"valid_UUID_primary_key", Column{Type: "uuid", IsNullable: false, IsArray: false}, false},
-		{"UUID_uppercase", Column{Type: "UUID", IsNullable: false, IsArray: false}, false},
-		{"non-UUID_type", Column{Type: "integer", IsNullable: false, IsArray: false}, true},
-		{"nullable_UUID", Column{Type: "uuid", IsNullable: true, IsArray: false}, true},
-		{"UUID_array", Column{Type: "uuid", IsNullable: false, IsArray: true}, true},
+		{
+			name:    "valid_UUID_primary_key",
+			column:  Column{Name: "id", Type: "uuid", IsNullable: false, IsArray: false},
+			wantErr: false,
+		},
+		{
+			name:    "UUID_uppercase",
+			column:  Column{Name: "id", Type: "UUID", IsNullable: false, IsArray: false},
+			wantErr: false,
+		},
+		{
+			name:           "non-UUID_type",
+			column:         Column{Name: "id", Type: "integer", IsNullable: false, IsArray: false},
+			wantErr:        true,
+			errorSubstring: "must be UUID type",
+		},
+		{
+			name:           "nullable_UUID",
+			column:         Column{Name: "id", Type: "uuid", IsNullable: true, IsArray: false},
+			wantErr:        true,
+			errorSubstring: "cannot be nullable",
+		},
+		{
+			name:           "UUID_array",
+			column:         Column{Name: "id", Type: "uuid", IsNullable: false, IsArray: true},
+			wantErr:        true,
+			errorSubstring: "cannot be an array",
+		},
 	}
 
 	for _, tt := range tests {
@@ -250,6 +518,13 @@ func TestTypeMapper_ValidateUUIDPrimaryKey(t *testing.T) {
 			err := tm.ValidateUUIDPrimaryKey(&tt.column)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateUUIDPrimaryKey() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			// Check error message content for error cases
+			if tt.wantErr && err != nil && tt.errorSubstring != "" {
+				if !strings.Contains(err.Error(), tt.errorSubstring) {
+					t.Errorf("Error message should contain '%s', got: %s", tt.errorSubstring, err.Error())
+				}
 			}
 		})
 	}

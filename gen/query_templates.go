@@ -72,17 +72,19 @@ type {{.StructName}} struct {
 
 // GetID returns the ID field for pagination (assumes first UUID field is the ID)
 func (r {{.StructName}}) GetID() uuid.UUID {
-{{if .IDField}}	return r.{{.IDField}}
-{{else}}	// No UUID field found, return zero UUID
+{{if .IDField}}{{if .IDFieldIsPgtype}}	return uuid.UUID(r.{{.IDField}}.Bytes)
+{{else}}	return r.{{.IDField}}
+{{end}}{{else}}	// No UUID field found, return zero UUID
 	return uuid.UUID{}
 {{end}}}`
 
 	// Prepare template data
 	data := struct {
-		StructName string
-		QueryName  string
-		IDField    string
-		Fields     []struct {
+		StructName      string
+		QueryName       string
+		IDField         string
+		IDFieldIsPgtype bool
+		Fields          []struct {
 			Name string
 			Type string
 			Tag  string
@@ -108,6 +110,7 @@ func (r {{.StructName}}) GetID() uuid.UUID {
 		// Use the first UUID field as the ID field for pagination
 		if data.IDField == "" && col.IsUUID() {
 			data.IDField = col.GoFieldName()
+			data.IDFieldIsPgtype = col.GoType == "pgtype.UUID"
 		}
 	}
 

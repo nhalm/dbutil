@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -75,6 +76,71 @@ func TestTable_GoStructName(t *testing.T) {
 	}
 }
 
+// TestTable_GoStructName_SpecialCharacters - test edge cases with special characters
+func TestTable_GoStructName_SpecialCharacters(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "underscore_case",
+			input:    "user_profile",
+			expected: "UserProfile",
+		},
+		{
+			name:     "multiple_underscores",
+			input:    "user_profile_data",
+			expected: "UserProfileData",
+		},
+		{
+			name:     "leading_underscore",
+			input:    "_private_field",
+			expected: "PrivateField",
+		},
+		{
+			name:     "trailing_underscore",
+			input:    "field_name_",
+			expected: "FieldName",
+		},
+		{
+			name:     "multiple_consecutive_underscores",
+			input:    "user__profile",
+			expected: "UserProfile",
+		},
+		{
+			name:     "empty_string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "single_character",
+			input:    "a",
+			expected: "A",
+		},
+		{
+			name:     "already_pascal_case",
+			input:    "UserProfile",
+			expected: "UserProfile",
+		},
+		{
+			name:     "mixed_case",
+			input:    "userId",
+			expected: "UserId",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			table := Table{Name: tc.input}
+			result := table.GoStructName()
+			if result != tc.expected {
+				t.Errorf("GoStructName(%s) = %s, want %s", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
 // TestTable_GoFileName - keep essential filename tests
 func TestTable_GoFileName(t *testing.T) {
 	tests := []struct {
@@ -91,6 +157,38 @@ func TestTable_GoFileName(t *testing.T) {
 		if got := table.GoFileName(); got != tt.want {
 			t.Errorf("GoFileName() = %v, want %v", got, tt.want)
 		}
+	}
+}
+
+// TestTable_LongNames - test handling of very long table names
+func TestTable_LongNames(t *testing.T) {
+	// Test handling of very long table and column names
+	longName := strings.Repeat("very_long_name_", 10) + "end"
+
+	table := Table{
+		Name:   longName,
+		Schema: "public",
+	}
+
+	// Test that long names are handled properly
+	structName := table.GoStructName()
+	if structName == "" {
+		t.Error("Long table name should produce non-empty struct name")
+	}
+
+	// Test that the result is valid Go identifier (starts with uppercase)
+	if len(structName) > 0 && (structName[0] < 'A' || structName[0] > 'Z') {
+		t.Errorf("Struct name should start with uppercase letter, got %s", structName)
+	}
+
+	// Test filename generation
+	fileName := table.GoFileName()
+	if fileName == "" {
+		t.Error("Long table name should produce non-empty filename")
+	}
+
+	if !strings.HasSuffix(fileName, "_generated.go") {
+		t.Errorf("Filename should end with _generated.go, got %s", fileName)
 	}
 }
 
@@ -300,5 +398,33 @@ func TestQueryType_Constants(t *testing.T) {
 		if got := string(tt.value); got != tt.want {
 			t.Errorf("QueryType constant %s = %v, want %v", tt.name, got, tt.want)
 		}
+	}
+}
+
+// TestTable_NilHandling - test handling of nil inputs for robustness
+func TestTable_NilHandling(t *testing.T) {
+	// Test GetColumn with nil columns slice
+	table := Table{
+		Name:    "test_table",
+		Schema:  "public",
+		Columns: nil,
+	}
+
+	col := table.GetColumn("nonexistent")
+	if col != nil {
+		t.Errorf("GetColumn on table with nil columns should return nil, got %v", col)
+	}
+
+	// Test GetPrimaryKeyColumn with nil primary key
+	pkCol := table.GetPrimaryKeyColumn()
+	if pkCol != nil {
+		t.Errorf("GetPrimaryKeyColumn on table with nil primary key should return nil, got %v", pkCol)
+	}
+
+	// Test empty primary key slice
+	table.PrimaryKey = []string{}
+	pkCol = table.GetPrimaryKeyColumn()
+	if pkCol != nil {
+		t.Errorf("GetPrimaryKeyColumn on table with empty primary key should return nil, got %v", pkCol)
 	}
 }
