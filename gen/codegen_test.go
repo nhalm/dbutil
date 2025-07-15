@@ -8,72 +8,7 @@ import (
 )
 
 // Test data for code generation tests
-func getTestTable() Table {
-	return Table{
-		Name:   "users",
-		Schema: "public",
-		Columns: []Column{
-			{
-				Name:         "id",
-				Type:         "uuid",
-				GoType:       "uuid.UUID",
-				IsNullable:   false,
-				DefaultValue: "",
-				IsArray:      false,
-			},
-			{
-				Name:         "name",
-				Type:         "text",
-				GoType:       "string",
-				IsNullable:   false,
-				DefaultValue: "",
-				IsArray:      false,
-			},
-			{
-				Name:         "email",
-				Type:         "text",
-				GoType:       "string",
-				IsNullable:   false,
-				DefaultValue: "",
-				IsArray:      false,
-			},
-			{
-				Name:         "is_active",
-				Type:         "boolean",
-				GoType:       "pgtype.Bool",
-				IsNullable:   true,
-				DefaultValue: "true",
-				IsArray:      false,
-			},
-			{
-				Name:         "created_at",
-				Type:         "timestamptz",
-				GoType:       "time.Time",
-				IsNullable:   false,
-				DefaultValue: "now()",
-				IsArray:      false,
-			},
-			{
-				Name:         "metadata",
-				Type:         "jsonb",
-				GoType:       "pgtype.JSONB",
-				IsNullable:   true,
-				DefaultValue: "",
-				IsArray:      false,
-			},
-		},
-		PrimaryKey: []string{"id"},
-		Indexes:    []Index{},
-	}
-}
-
-func getTestConfig() *Config {
-	return &Config{
-		OutputDir:   "/tmp/test",
-		PackageName: "repositories",
-		Verbose:     false,
-	}
-}
+// getTestTable and getTestConfig are now in test_helpers.go
 
 func TestNewCodeGenerator(t *testing.T) {
 	config := getTestConfig()
@@ -163,13 +98,7 @@ func TestCodeGenerator_combineImports(t *testing.T) {
 }
 
 func TestCodeGenerator_GenerateTableRepository_Integration(t *testing.T) {
-	tempDir := t.TempDir()
-
-	config := &Config{
-		OutputDir:   tempDir,
-		PackageName: "repositories",
-		Verbose:     false,
-	}
+	config := getTestConfigWithTempDir(t)
 
 	cg := NewCodeGenerator(config)
 	table := getTestTable()
@@ -181,7 +110,7 @@ func TestCodeGenerator_GenerateTableRepository_Integration(t *testing.T) {
 	}
 
 	// Check that file was created and contains basic structure
-	expectedFilename := filepath.Join(tempDir, "users_generated.go")
+	expectedFilename := filepath.Join(config.OutputDir, "users_generated.go")
 	if _, err := os.Stat(expectedFilename); os.IsNotExist(err) {
 		t.Fatal("Generated file does not exist")
 	}

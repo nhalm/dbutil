@@ -2,32 +2,10 @@ package gen
 
 import (
 	"context"
-	"os"
 	"testing"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// getTestDB creates a connection to the test database
-func getTestDB(t *testing.T) *pgxpool.Pool {
-	// Use environment variable if set, otherwise use default test database
-	dbURL := os.Getenv("TEST_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://dbutil:dbutil_test_password@localhost:5432/dbutil_test"
-	}
-
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Skipf("Failed to connect to test database: %v", err)
-	}
-
-	// Test the connection
-	if err := pool.Ping(context.Background()); err != nil {
-		t.Skipf("Failed to ping test database: %v", err)
-	}
-
-	return pool
-}
+// getTestDB is now in test_helpers.go
 
 func TestIntrospector_GetTables_Integration(t *testing.T) {
 	pool := getTestDB(t)

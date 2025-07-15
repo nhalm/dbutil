@@ -7,17 +7,10 @@ import (
 )
 
 func TestInlinePagination_TemplateGeneration(t *testing.T) {
-	// Create temporary directory for test output
-	tempDir := t.TempDir()
-
-	config := &Config{
-		OutputDir:   tempDir,
-		PackageName: "repositories",
-		Verbose:     false,
-		TableConfigs: map[string]TableConfig{
-			"users": {
-				Functions: []string{"create", "get", "update", "delete", "paginate"},
-			},
+	config := getTestConfigWithTempDir(t)
+	config.TableConfigs = map[string]TableConfig{
+		"users": {
+			Functions: []string{"create", "get", "update", "delete", "paginate"},
 		},
 	}
 
